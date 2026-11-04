@@ -2,7 +2,7 @@
 
 **See what's filling your storage.** DiskAtlas surveys a folder or a whole drive and maps it, right in your browser. Nothing is installed and nothing is uploaded.
 
-> Status: in development, not released yet.
+> Status: in development. The website isn't online yet; run it locally (see Development).
 
 ## Features
 
