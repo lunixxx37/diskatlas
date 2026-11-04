@@ -85,6 +85,10 @@ function* populate(b: TreeBuilder, now: number, names: DemoNames): Generator<voi
   };
 
   const root = dir(-1, names.root);
+  /** Files that get copies at the end (name, size, modified), for the duplicates tab. */
+  const sharedClips: Array<[string, number, number]> = [];
+  let firstFilm: [string, number] | null = null;
+  const backedUp: Array<[month: string, files: Array<[string, number, number]>]> = [];
 
   // Games: a few huge archives each, plus thousands of tiny shader caches.
   const steamapps = dir(dir(dir(root, names.games), 'SteamLibrary'), 'steamapps');
@@ -132,7 +136,10 @@ function* populate(b: TreeBuilder, now: number, names: DemoNames): Generator<voi
     const start = new Date(year, int(0, 10), int(1, 25)).getTime();
     for (let k = 0, n = int(15, 40); k < n; k++) {
       const taken = start + between(0, 14) * DAY;
-      file(folder, `VID_${stamp(taken)}.mp4`, logBetween(50 * MB, 1.5 * GB), taken);
+      const name = `VID_${stamp(taken)}.mp4`;
+      const size = logBetween(50 * MB, 1.5 * GB);
+      file(folder, name, size, taken);
+      if (t === 0 && k < 4) sharedClips.push([name, size, taken]);
     }
     if (due()) yield;
   }
@@ -144,7 +151,9 @@ function* populate(b: TreeBuilder, now: number, names: DemoNames): Generator<voi
   const films = dir(videos, names.films);
   for (const film of names.filmList) {
     const added = daysAgo(30, 2200);
-    file(films, `${film}.mkv`, logBetween(3 * GB, 16 * GB), added);
+    const size = logBetween(3 * GB, 16 * GB);
+    file(films, `${film}.mkv`, size, added);
+    firstFilm ??= [`${film}.mkv`, size];
     if (rnd() < 0.6) file(films, `${film}.srt`, logBetween(40 * KB, 120 * KB), added);
   }
 
@@ -157,12 +166,22 @@ function* populate(b: TreeBuilder, now: number, names: DemoNames): Generator<voi
     const lastMonth = year === today.getFullYear() ? today.getMonth() : 11;
     for (let month = 0; month <= lastMonth; month++) {
       if (rnd() > 0.7) continue;
-      const monthFolder = dir(yearFolder, `${year}-${pad(month + 1)}`);
+      const monthName = `${year}-${pad(month + 1)}`;
+      const monthFolder = dir(yearFolder, monthName);
+      // The first months of 2019 were backed up twice (see the end).
+      const copies: Array<[string, number, number]> | null = year === 2019 && backedUp.reduce((n, [, f]) => n + f.length, 0) < 60 ? [] : null;
+      if (copies) backedUp.push([monthName, copies]);
       for (let k = 0, n = int(15, 110); k < n; k++) {
         const taken = new Date(year, month, 1).getTime() + between(0, 27) * DAY;
         counter++;
-        file(monthFolder, `IMG_${counter}.jpg`, logBetween(1.8 * MB, 9 * MB), taken);
-        if (rnd() < 0.25) file(monthFolder, `IMG_${counter}.cr3`, logBetween(22 * MB, 34 * MB), taken);
+        const jpg = logBetween(1.8 * MB, 9 * MB);
+        file(monthFolder, `IMG_${counter}.jpg`, jpg, taken);
+        copies?.push([`IMG_${counter}.jpg`, jpg, taken]);
+        if (rnd() < 0.25) {
+          const raw = logBetween(22 * MB, 34 * MB);
+          file(monthFolder, `IMG_${counter}.cr3`, raw, taken);
+          copies?.push([`IMG_${counter}.cr3`, raw, taken]);
+        }
         if (due()) yield;
       }
     }
@@ -269,6 +288,17 @@ function* populate(b: TreeBuilder, now: number, names: DemoNames): Generator<voi
   const bin = dir(root, '$RECYCLE.BIN');
   for (let k = 0; k < 24; k++) file(bin, `$R${Math.floor(rnd() * 2 ** 24).toString(36).toUpperCase()}.tmp`, logBetween(1 * MB, 900 * MB), daysAgo(1, 60));
   b.flag(dir(root, 'System Volume Information'), FLAG_UNREADABLE);
+
+  // Copies, as they pile up on a real drive (after everything else, so nothing above changes):
+  // holiday clips downloaded again, a film also in Downloads, photos backed up twice (a copy
+  // keeps its date).
+  for (const [name, size, taken] of sharedClips) file(downloads, name, size, taken + between(20, 200) * DAY);
+  if (firstFilm) file(downloads, firstFilm[0], firstFilm[1], daysAgo(5, 25));
+  const photoBackup = dir(backups, names.photos);
+  for (const [month, files] of backedUp) {
+    const folder = dir(photoBackup, month);
+    for (const [name, size, taken] of files) file(folder, name, size, taken);
+  }
 }
 
 /** Name of the demo drive's top folder. */

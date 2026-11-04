@@ -5,6 +5,8 @@ export interface MenuItem {
   label: string;
   icon?: IconName;
   run: () => void;
+  /** Styled as a destructive action. */
+  danger?: boolean;
 }
 
 export interface MenuSpec {
@@ -28,9 +30,21 @@ export function closeMenu(): void {
  * <body> with fixed position, so no scrolling or clipping container can cut it off.
  */
 export function openMenu(anchor: HTMLElement, spec: MenuSpec, focus: 'first' | 'last' = 'first'): void {
+  show(spec, focus, anchor, anchor.getBoundingClientRect(), anchor);
+}
+
+/**
+ * A context menu at a point (right-click, or the context-menu key with the point at the
+ * focused row). Escape returns focus to `returnFocus`.
+ */
+export function openContextMenu(at: { x: number; y: number }, spec: MenuSpec, returnFocus: HTMLElement | null): void {
+  show(spec, 'first', null, new DOMRect(at.x, at.y, 0, 0), returnFocus);
+}
+
+function show(spec: MenuSpec, focus: 'first' | 'last', anchor: HTMLElement | null, box: DOMRect, returnFocus: HTMLElement | null): void {
   closeMenu();
   const buttons = spec.items.map((item) => {
-    const b = h('button', { class: 'menu__item', type: 'button', role: 'menuitem', tabindex: '-1' }, item.icon ? icon(item.icon) : null, h('span', { class: 'menu__text', text: item.label }));
+    const b = h('button', { class: `menu__item${item.danger ? ' menu__item--danger' : ''}`, type: 'button', role: 'menuitem', tabindex: '-1' }, item.icon ? icon(item.icon) : null, h('span', { class: 'menu__text', text: item.label }));
     b.addEventListener('click', () => {
       close(true);
       item.run();
@@ -45,7 +59,6 @@ export function openMenu(anchor: HTMLElement, spec: MenuSpec, focus: 'first' | '
   );
   document.body.append(menu);
 
-  const box = anchor.getBoundingClientRect();
   const width = menu.offsetWidth;
   const height = menu.offsetHeight;
   let left = spec.align === 'end' ? box.right - width : box.left;
@@ -54,11 +67,11 @@ export function openMenu(anchor: HTMLElement, spec: MenuSpec, focus: 'first' | '
   if (top + height > window.innerHeight - 8) top = Math.max(8, box.top - 6 - height);
   menu.style.left = `${Math.round(left)}px`;
   menu.style.top = `${Math.round(top)}px`;
-  anchor.setAttribute('aria-expanded', 'true');
+  anchor?.setAttribute('aria-expanded', 'true');
 
   const onPointer = (event: PointerEvent) => {
     const target = event.target as Node;
-    if (!menu.contains(target) && !anchor.contains(target)) close(false);
+    if (!menu.contains(target) && !anchor?.contains(target)) close(false);
   };
   const onResize = () => close(false);
   menu.addEventListener('keydown', (event) => {
@@ -80,14 +93,14 @@ export function openMenu(anchor: HTMLElement, spec: MenuSpec, focus: 'first' | '
   document.addEventListener('pointerdown', onPointer, true);
   window.addEventListener('resize', onResize);
 
-  function close(returnFocus: boolean): void {
+  function close(returnFocusNow: boolean): void {
     if (!menu.isConnected) return;
     menu.remove();
-    anchor.setAttribute('aria-expanded', 'false');
+    anchor?.setAttribute('aria-expanded', 'false');
     document.removeEventListener('pointerdown', onPointer, true);
     window.removeEventListener('resize', onResize);
     closeOpen = null;
-    if (returnFocus) anchor.focus();
+    if (returnFocusNow) returnFocus?.focus();
   }
   closeOpen = () => close(false);
   buttons[focus === 'last' ? buttons.length - 1 : 0]?.focus();

@@ -14,6 +14,7 @@ import {
   type ScanTree,
 } from '../core';
 import { APP_NAME } from './brand';
+import { Cleanup } from './cleanup';
 import { h, setText } from './dom';
 import { displayName } from './format';
 import { HelperLink, isWindowsDesktop } from './helper-link';
@@ -76,7 +77,7 @@ export class App {
   private scanView: ScanView | null = null;
   private resultsView: ResultsView | null = null;
   private rerender: (() => void) | null = null;
-  /** True while a language switch rebuilds the view: keep scroll position and focus. */
+  /** True while the view is rebuilt in place (language switch, an item recycled): keep scroll position and focus. */
   private relocalizing = false;
   private source: Source | null = null;
   private running: RunningScan | null = null;
@@ -326,27 +327,62 @@ export class App {
     this.startView = view;
   }
 
-  private showResults(tree: ScanTree): void {
-    const build = (restore?: ResultsState) => {
-      // Offer the administrator restart only for helper scans without it, while the helper is connected.
-      const canElevate = tree.meta.source === 'helper' && tree.meta.helper?.elevated === false && !!this.helper?.client && this.source?.kind === 'helper';
-      const view = new ResultsView({
-        tree,
-        theme: this.theme,
-        onRescan: this.source ? this.rescan : null,
-        onOtherFolder: this.pick,
-        onElevate: canElevate ? this.elevateAndRescan : null,
-        restore,
-      });
-      this.show('results', view, `${displayName(tree, tree.root)} · ${formatBytes(tree.size(tree.root))} – ${APP_NAME}`, {
-        context: view.context,
-        actions: view.actions,
-        rerender: () => build(this.resultsView?.snapshot()),
-      });
-      this.resultsView = view;
-      if (!restore) view.focus();
-    };
-    build();
+  /** `restore`: the state of the view this one replaces (language switch, an item recycled). */
+  private showResults(tree: ScanTree, restore?: ResultsState): void {
+    // Offer the administrator restart only for helper scans without it, while the helper is connected.
+    const canElevate = tree.meta.source === 'helper' && tree.meta.helper?.elevated === false && !!this.helper?.client && this.source?.kind === 'helper';
+    // Clean-up actions: helper scans only; the scan says which actions its helper offered.
+    let cleanup =
+      tree.meta.source === 'helper' && this.helper
+        ? new Cleanup({
+            tree,
+            link: this.helper,
+            onRecycled: (entry) => this.recycled(tree, entry),
+            onRescan: this.rescan,
+            fallbackFocus: () => this.resultsView?.el.querySelector<HTMLElement>('.ftree__scroller') ?? null,
+          })
+        : null;
+    // A helper without either action (an older one, or not on Windows): no empty action columns.
+    if (cleanup && !cleanup.offers('reveal') && !cleanup.offers('recycle')) cleanup = null;
+    const view = new ResultsView({
+      tree,
+      theme: this.theme,
+      onRescan: this.source ? this.rescan : null,
+      onOtherFolder: this.pick,
+      onElevate: canElevate ? this.elevateAndRescan : null,
+      cleanup,
+      restore,
+    });
+    this.show('results', view, `${displayName(tree, tree.root)} · ${formatBytes(tree.size(tree.root))} – ${APP_NAME}`, {
+      context: view.context,
+      actions: view.actions,
+      rerender: () => this.showResults(tree, this.resultsView?.snapshot()),
+    });
+    this.resultsView = view;
+    if (!restore) view.focus();
+  }
+
+  /** An item is in the Recycle Bin now: take it out of the results everywhere, keep the place. */
+  private recycled(tree: ScanTree, entry: number): void {
+    const view = this.resultsView;
+    if (!view || view.tree !== tree) return;
+    const name = displayName(tree, entry);
+    const size = formatBytes(tree.size(entry));
+    // The dialog gave the focus back to the control that opened it: a list in a tab, or the tree.
+    const opener = document.activeElement;
+    const fromPanel = opener instanceof HTMLElement && !!opener.closest('.tabpanel:not(.tabpanel--tree)');
+    const removal = tree.remove(entry);
+    if (!removal) return;
+    const state = view.afterRemoval(removal);
+    this.relocalizing = true;
+    try {
+      this.showResults(tree, state);
+    } finally {
+      this.relocalizing = false;
+    }
+    if (fromPanel) this.resultsView?.focusPanel();
+    else this.resultsView?.focusTree();
+    toast(t.cleanup.done(name, size), 'trash', 8000);
   }
 
   private showError(error: unknown): void {

@@ -7,17 +7,21 @@ import {
   formatDateTime,
   formatDuration,
   formatPercent,
+  type DuplicateOptions,
+  type Removal,
   type ScanTree,
 } from '../../core';
 import { APP_NAME } from '../brand';
+import type { Cleanup } from '../cleanup';
 import { h, setText, uniqueId } from '../dom';
 import { displayName, displayPath, safeFilename } from '../format';
 import { plural, t } from '../i18n';
 import { icon, type IconName } from '../icons';
-import { closeMenu, menuButton } from '../menu';
+import { closeMenu, menuButton, openContextMenu, type MenuItem } from '../menu';
 import type { ThemeManager } from '../theme';
 import { copyText, toast } from '../toast';
 import { AnalysisCache } from './analysis-cache';
+import { DuplicatesPanel } from './duplicates';
 import { FileAgePanel } from './file-age';
 import { FileTypesPanel } from './file-types';
 import { FolderTree, type FolderTreeState } from './folder-tree';
@@ -32,11 +36,13 @@ export interface ResultsViewOptions {
   onOtherFolder: () => void;
   /** A helper scan without administrator rights, helper connected: restart it elevated and scan again. */
   onElevate?: (() => Promise<void>) | null;
+  /** Show in Explorer / Move to Recycle Bin (helper scans whose helper offers them); null otherwise. */
+  cleanup?: Cleanup | null;
   /** State of an earlier view of the same tree (the language changed): carry on from there. */
   restore?: ResultsState;
 }
 
-type TabId = 'tree' | 'map' | 'top' | 'types' | 'age';
+type TabId = 'tree' | 'map' | 'top' | 'types' | 'age' | 'dupes';
 
 /** Everything a results view needs to be rebuilt as it was. */
 export interface ResultsState {
@@ -48,6 +54,8 @@ export interface ResultsState {
   isolate: number;
   explainOpen: boolean;
   panelScroll: number;
+  /** The duplicates tab's options. */
+  dupes?: DuplicateOptions;
 }
 
 const TABS: Array<{ id: TabId; icon: IconName }> = [
@@ -56,6 +64,7 @@ const TABS: Array<{ id: TabId; icon: IconName }> = [
   { id: 'top', icon: 'list' },
   { id: 'types', icon: 'pie' },
   { id: 'age', icon: 'clock' },
+  { id: 'dupes', icon: 'duplicate' },
 ];
 
 const WIDE = '(min-width: 1100px)';
@@ -66,6 +75,7 @@ const DEFAULT_SPLIT = 46;
 interface Panel {
   el: HTMLElement;
   update(folder: number): void;
+  destroy?(): void;
 }
 
 /**
@@ -79,8 +89,9 @@ export class ResultsView {
   /** Shown in the top bar while this view is open. */
   readonly context: HTMLElement;
   readonly actions: HTMLElement;
-  private readonly tree: ScanTree;
+  readonly tree: ScanTree;
   private readonly cache: AnalysisCache;
+  private readonly restoredDupes: DuplicateOptions | undefined;
   private readonly folderTree: FolderTree | null = null;
   private readonly map: TreemapView | null = null;
   private readonly panels = new Map<TabId, Panel>();
@@ -108,6 +119,7 @@ export class ResultsView {
     this.selected = restore?.selected ?? tree.root;
     this.current = restore?.current ?? tree.root;
     this.active = restore?.active ?? 'map';
+    this.restoredDupes = restore?.dupes;
 
     this.context = this.buildContext();
     this.actions = this.buildActions();
@@ -126,6 +138,8 @@ export class ResultsView {
         onActivate: (entry) => this.showInMap(entry),
         onHover: (entry) => this.map?.setLinked(entry),
         onCopy: (entry) => void this.copyPath(entry),
+        actions: options.cleanup ?? null,
+        onContextMenu: (entry, at, returnFocus) => this.entryMenu(entry, at, returnFocus),
       });
       this.treePane.append(this.folderTree.el);
       this.map = new TreemapView({
@@ -135,6 +149,7 @@ export class ResultsView {
         onOpenFolder: (dir) => this.navigate(dir),
         onSelectEntry: (entry) => this.navigate(entry),
         onHover: (entry) => this.folderTree?.setLinked(entry),
+        onContextMenu: (entry, at) => this.entryMenu(entry, at, null),
       });
     }
 
@@ -173,7 +188,56 @@ export class ResultsView {
       isolate: this.map?.isolated ?? -1,
       explainOpen: this.explainToggle?.getAttribute('aria-expanded') === 'true',
       panelScroll: this.tabPanels.get(this.active)?.scrollTop ?? 0,
+      dupes: (this.panels.get('dupes') as DuplicatesPanel | undefined)?.settings ?? this.restoredDupes,
     };
+  }
+
+  /**
+   * The state to rebuild with after `removal` (an item went to the Recycle Bin): the
+   * analysis is stale, and the selection moves to the item's parent, shown in the tree.
+   * The tabs stay on their folder (a list being worked through keeps its place), unless
+   * that folder is gone too.
+   */
+  afterRemoval(removal: Removal): ResultsState {
+    const state = this.snapshot();
+    const gone = (i: number) => this.tree.removed(i);
+    state.cache.clear();
+    state.selected = removal.parent;
+    if (gone(state.current)) state.current = removal.parent;
+    const tree = state.folderTree;
+    if (tree) {
+      const expanded = new Set(tree.expanded.filter((e) => !gone(e)));
+      for (let a = this.tree.parent(removal.parent); a >= 0; a = this.tree.parent(a)) expanded.add(a);
+      tree.expanded = [...expanded];
+      tree.selected = removal.parent;
+      tree.active = removal.parent;
+      tree.reveal = true;
+    }
+    return state;
+  }
+
+  /** Keyboard focus to the folder tree (after a rebuilt view), or the heading when there is none. */
+  focusTree(): void {
+    if (this.folderTree && (this.media.matches || this.active === 'tree')) this.folderTree.focus();
+    else this.focus();
+  }
+
+  /** Keyboard focus to the open tab's panel (an action in its list rebuilt the view). */
+  focusPanel(): void {
+    const panel = this.tabPanels.get(this.active);
+    if (panel && this.active !== 'tree' && !panel.hidden) panel.focus({ preventScroll: true });
+    else this.focusTree();
+  }
+
+  /** The context menu for an entry (tree row or map region). */
+  private entryMenu(entry: number, at: { x: number; y: number }, returnFocus: HTMLElement | null): void {
+    const cleanup = this.options.cleanup ?? null;
+    const items: MenuItem[] = [];
+    if (this.tree.isDir(entry) && entry !== this.current) items.push({ label: t.results.openFolder, icon: 'folder', run: () => this.navigate(entry) });
+    items.push({ label: t.cleanup.copyPath, icon: 'copy', run: () => void this.copyPath(entry) });
+    if (cleanup?.canReveal(entry)) items.push({ label: t.cleanup.reveal, icon: 'folderOpen', run: () => cleanup.reveal(entry, returnFocus) });
+    if (cleanup?.canRecycle(entry)) items.push({ label: `${t.cleanup.recycle}…`, icon: 'trash', danger: true, run: () => cleanup.recycle(entry, returnFocus) });
+    openContextMenu(at, { label: `${t.cleanup.menu}: ${displayName(this.tree, entry)}`, items }, returnFocus);
   }
 
   destroy(): void {
@@ -182,6 +246,7 @@ export class ResultsView {
     closeMenu();
     this.folderTree?.destroy();
     this.map?.destroy();
+    for (const panel of this.panels.values()) panel.destroy?.();
   }
 
   /** Where keyboard focus should go when the view opens. */
@@ -290,11 +355,25 @@ export class ResultsView {
     let panel = this.panels.get(id);
     if (panel || id === 'tree') return panel;
     if (id === 'top') {
-      panel = new TopFilesPanel({ tree: this.tree, cache: this.cache, onReveal: (entry) => this.revealInTree(entry), onExport: (folder) => this.exportFiles(folder) });
+      panel = new TopFilesPanel({
+        tree: this.tree,
+        cache: this.cache,
+        onReveal: (entry) => this.revealInTree(entry),
+        onExport: (folder) => this.exportFiles(folder),
+        actions: this.options.cleanup ?? null,
+      });
     } else if (id === 'types') {
       panel = new FileTypesPanel(this.tree, this.cache);
     } else if (id === 'age') {
       panel = new FileAgePanel(this.tree, this.cache);
+    } else if (id === 'dupes') {
+      panel = new DuplicatesPanel({
+        tree: this.tree,
+        cache: this.cache,
+        actions: this.options.cleanup ?? null,
+        onSelect: (entry) => this.revealInTree(entry),
+        settings: this.restoredDupes,
+      });
     }
     if (!panel) return undefined;
     this.panels.set(id, panel);
@@ -384,6 +463,7 @@ export class ResultsView {
     let unreadable = 0;
     let deep = 0;
     for (let i = 0; i < tree.count; i++) {
+      if (tree.removed(i)) continue;
       if (tree.unreadable(i)) unreadable++;
       else if (tree.tooDeep(i)) deep++;
     }

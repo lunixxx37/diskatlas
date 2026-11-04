@@ -157,6 +157,8 @@ func serve(opts options, logger *log.Logger) int {
 		idle:        opts.idle,
 		logger:      logger,
 		elevateArgs: elevatedArgs(opts, port),
+		recycle:     platformRecycle(),
+		reveal:      platformReveal(),
 		exit: func(reason string) {
 			select {
 			case exitCh <- reason:

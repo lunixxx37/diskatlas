@@ -1,0 +1,430 @@
+/* Clean-up through the helper (dialog, row actions) and the duplicates tab. */
+
+/* ---------- Modal dialog ---------- */
+
+.modal {
+  width: min(540px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-pop);
+}
+
+.modal::backdrop {
+  /* Older browsers don't pass custom properties to ::backdrop: the fallback is the light one. */
+  background: var(--scrim, rgb(16 20 23 / 0.5));
+}
+
+.modal__inner {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px 18px;
+}
+
+.modal__title {
+  font-size: 19px;
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.modal__lede {
+  margin-top: -6px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.modal__actions .btn[hidden] {
+  display: none;
+}
+
+.recycle__item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.recycle__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.recycle__name svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  color: var(--ink-2);
+}
+
+.recycle__path {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.recycle__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 3px 16px;
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.recycle__facts dt {
+  color: var(--muted);
+}
+
+.recycle__note {
+  display: flex;
+  gap: 9px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.recycle__note svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.recycle__note[data-tone="warn"] {
+  padding: 9px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-wash);
+  color: var(--ink);
+}
+
+.recycle__note[data-tone="warn"] svg {
+  color: var(--warn);
+}
+
+.recycle__status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 22px;
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.recycle__status:focus {
+  outline: none;
+}
+
+.recycle__status > svg,
+.recycle__status > .spinner {
+  flex: none;
+  margin-top: 2px;
+}
+
+.recycle__status > svg {
+  width: 17px;
+  height: 17px;
+}
+
+.recycle__status[data-tone="ok"] > svg {
+  color: var(--ok);
+}
+
+.recycle__status[data-tone="warn"] > svg {
+  color: var(--warn);
+}
+
+/* The one destructive action: red, filled. */
+.btn--danger {
+  --btn-bg: var(--danger);
+  --btn-fg: var(--on-danger);
+  font-weight: 620;
+}
+
+.btn--danger:hover:not(:disabled) {
+  --btn-bg: var(--danger-strong);
+}
+
+.btn--danger:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 3px;
+}
+
+.menu__item--danger {
+  color: var(--danger-text);
+}
+
+/* ---------- Row actions (selection bar, largest files, duplicates) ---------- */
+
+.entry-actions {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+}
+
+.entry-action {
+  color: var(--ink-2);
+}
+
+.entry-action svg {
+  width: 15px;
+  height: 15px;
+}
+
+.entry-action--recycle:hover:not(:disabled),
+.selbar__recycle:hover:not(:disabled) {
+  color: var(--danger-text);
+}
+
+.datatable .c-actions {
+  width: 70px;
+  padding-block: 0;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.selbar__tools {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.selbar__tools .btn[hidden] {
+  display: none;
+}
+
+.ftree {
+  container: ftree / inline-size;
+}
+
+/* A narrow tree keeps the actions, as icons with their names as tooltips and labels. */
+@container ftree (max-width: 600px) {
+  .selbar__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .selbar__tools .btn {
+    padding: 0 8px;
+  }
+}
+
+/* ---------- Duplicates tab ---------- */
+
+.dupes__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  margin-top: 14px;
+}
+
+.dupes__min {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.dupes__system {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dupes__system[hidden] {
+  display: none;
+}
+
+.dupes__system svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+
+.dupes__searching {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  color: var(--ink-2);
+}
+
+.dupes__summary {
+  margin: 16px 0 10px;
+  font-weight: 620;
+}
+
+.dupes {
+  display: grid;
+  gap: 10px;
+}
+
+.dupe {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.dupe__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.dupe__name {
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.dupe__hint {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.dupe__meta {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.dupe__member {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 64px 66px;
+  align-items: center;
+  gap: 2px 12px;
+  min-height: 36px;
+  padding: 2px 6px 2px 12px;
+}
+
+/* No helper actions (browser, file-list and demo scans): no empty column for them. */
+.dupes--plain .dupe__member {
+  grid-template-columns: minmax(0, 1fr) 96px 64px;
+  padding-right: 12px;
+}
+
+.dupe__member + .dupe__member {
+  border-top: 1px solid var(--line);
+}
+
+.dupe__where {
+  display: flex;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dupe__where:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dupe__date {
+  color: var(--ink-2);
+  font-size: 12.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.dupe__newest {
+  justify-self: start;
+  padding: 1px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dupe__newest--none {
+  visibility: hidden;
+}
+
+.dupe__member .entry-actions {
+  justify-self: end;
+}
+
+@container panel (max-width: 520px) {
+  .dupe__member {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding: 4px 4px 4px 10px;
+  }
+  .dupe__where {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
+  .dupe__date {
+    justify-self: start;
+  }
+  .dupe__meta {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

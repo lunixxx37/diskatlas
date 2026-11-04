@@ -22,6 +22,8 @@ export interface TreemapViewOptions {
   onOpenFolder: (dir: number) => void;
   /** A file region was clicked: select it. */
   onSelectEntry: (entry: number) => void;
+  /** Right-click on a region (not on grouped small entries): the entry it stands for. */
+  onContextMenu?: (entry: number, at: { x: number; y: number }) => void;
   /** Pointer over a region (linked highlighting); -1 when it leaves. */
   onHover: (entry: number) => void;
   /** Category index to highlight from the start (kept across a language switch); -1 = none. */
@@ -112,6 +114,7 @@ export class TreemapView {
     this.overlay.addEventListener('pointermove', this.onPointerMove);
     this.overlay.addEventListener('pointerleave', this.onPointerLeave);
     this.overlay.addEventListener('click', this.onClick);
+    this.overlay.addEventListener('contextmenu', this.onContextMenu);
     this.legend.addEventListener('pointerover', this.onLegendOver);
     this.legend.addEventListener('pointerleave', () => this.setIsolate(this.isolateSticky));
     this.legend.addEventListener('focusin', this.onLegendOver);
@@ -483,6 +486,18 @@ export class TreemapView {
       this.drawOverlay();
       this.options.onHover(-1);
     }
+  };
+
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    if (!this.options.onContextMenu) return;
+    const box = this.overlay.getBoundingClientRect();
+    const r = this.rects[this.hitTest(event.clientX - box.left, event.clientY - box.top)];
+    if (!r || r.kind === 'rest') return;
+    event.preventDefault();
+    tooltip.hide();
+    // A file becomes the selection; a folder stays a region of the current folder.
+    if (r.kind === 'file') this.options.onSelectEntry(r.i);
+    this.options.onContextMenu(r.i, { x: event.clientX, y: event.clientY });
   };
 
   private readonly onClick = (event: MouseEvent): void => {

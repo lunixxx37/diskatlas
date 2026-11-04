@@ -9,6 +9,8 @@ export const FLAG_TOO_DEEP = 2;
 export const FLAG_LINK = 4;
 /** An online-only placeholder (e.g. OneDrive Files On-Demand): real size, nothing on disk (helper scans). */
 export const FLAG_CLOUD = 8;
+/** Moved to the Recycle Bin after the scan (set by `ScanTree.remove`, with everything inside). */
+export const FLAG_REMOVED = 16;
 
 /** 'helper': read by the DiskAtlas Helper for Windows (docs/helper-protocol.md). */
 export type ScanSource = 'picker' | 'files' | 'demo' | 'helper';
@@ -18,6 +20,8 @@ export interface HelperScanInfo {
   version: string;
   /** Ran with administrator rights, so it could read more folders. */
   elevated: boolean;
+  /** What it offered besides scanning ("reveal", "recycle"); see docs/helper-protocol.md. */
+  features?: string[];
 }
 
 export interface ScanMeta {
@@ -200,12 +204,32 @@ export function transferablesOf(data: ScanData): ArrayBuffer[] {
   ].map((array) => array.buffer as ArrayBuffer);
 }
 
-/** Read access to a finished scan. Entries are addressed by index; the root is 0. */
+/** What `ScanTree.remove` took away: the entry and everything inside it. */
+export interface Removal {
+  entry: number;
+  parent: number;
+  size: number;
+  allocated: number;
+  files: number;
+  /** Folders, the entry itself included when it is one. */
+  dirs: number;
+}
+
+/**
+ * Read access to a finished scan. Entries are addressed by index; the root is 0. The only
+ * change after the scan is `remove()`, for an item moved to the Recycle Bin.
+ */
 export class ScanTree {
   readonly root = 0;
   private categories?: Uint8Array;
+  /** End of each folder's children in childList (shrinks when a child is removed). */
+  private readonly childEnd: Int32Array;
+  /** Counts removals, so caches can tell when their results are stale. */
+  version = 0;
 
-  constructor(readonly data: ScanData) {}
+  constructor(readonly data: ScanData) {
+    this.childEnd = data.childStart.slice(1);
+  }
 
   get meta(): ScanMeta {
     return this.data.meta;
@@ -276,13 +300,85 @@ export class ScanTree {
     return (this.data.flags[i] & FLAG_CLOUD) !== 0;
   }
 
+  /** Moved to the Recycle Bin after the scan (or inside something that was). */
+  removed(i: number): boolean {
+    return (this.data.flags[i] & FLAG_REMOVED) !== 0;
+  }
+
   /** Direct children, largest first. A view into the tree: do not modify it. */
   children(i: number): Int32Array {
-    return this.data.childList.subarray(this.data.childStart[i], this.data.childStart[i + 1]);
+    return this.data.childList.subarray(this.data.childStart[i], this.childEnd[i]);
   }
 
   childCount(i: number): number {
-    return this.data.childStart[i + 1] - this.data.childStart[i];
+    return this.childEnd[i] - this.data.childStart[i];
+  }
+
+  /**
+   * Takes an entry (and everything inside it) out of the tree after it went to the Recycle
+   * Bin: it leaves its parent's children, and every ancestor loses its size, size on disk,
+   * files and folders, gets its newest date again and keeps its place among its siblings
+   * (largest first). Returns null for the root or an entry that is already gone.
+   */
+  remove(i: number): Removal | null {
+    const d = this.data;
+    if (i <= 0 || i >= this.count || this.removed(i)) return null;
+    const parent = d.parent[i];
+    const dir = d.isDir[i] === 1;
+    const removal: Removal = {
+      entry: i,
+      parent,
+      size: d.size[i],
+      allocated: this.allocated(i),
+      files: dir ? d.fileCount[i] : 1,
+      dirs: dir ? d.dirCount[i] + 1 : 0,
+    };
+    d.flags[i] |= FLAG_REMOVED;
+    this.forEachDescendant(i, (j) => {
+      d.flags[j] |= FLAG_REMOVED;
+    });
+
+    const list = d.childList;
+    const start = d.childStart[parent];
+    const end = this.childEnd[parent];
+    let k = start;
+    while (k < end && list[k] !== i) k++;
+    if (k < end) {
+      list.copyWithin(k, k + 1, end);
+      this.childEnd[parent] = end - 1;
+    }
+
+    for (let a = parent; a >= 0; a = d.parent[a]) {
+      d.size[a] -= removal.size;
+      if (d.allocated) d.allocated[a] -= removal.allocated;
+      d.fileCount[a] -= removal.files;
+      d.dirCount[a] -= removal.dirs;
+      let newest = 0;
+      for (const c of this.children(a)) if (d.mtime[c] > newest) newest = d.mtime[c];
+      d.mtime[a] = newest;
+      this.keepOrder(a);
+    }
+    this.categories = undefined;
+    this.version++;
+    return removal;
+  }
+
+  /** After `a` got smaller: move it back to its place among its siblings, largest first. */
+  private keepOrder(a: number): void {
+    const d = this.data;
+    const parent = d.parent[a];
+    if (parent < 0) return;
+    const list = d.childList;
+    const end = this.childEnd[parent];
+    let k = d.childStart[parent];
+    while (k < end && list[k] !== a) k++;
+    const before = (x: number, y: number) =>
+      d.size[x] > d.size[y] || (d.size[x] === d.size[y] && (d.isDir[x] > d.isDir[y] || (d.isDir[x] === d.isDir[y] && d.names[x] < d.names[y])));
+    while (k + 1 < end && before(list[k + 1], a)) {
+      list[k] = list[k + 1];
+      list[k + 1] = a;
+      k++;
+    }
   }
 
   depth(i: number): number {
@@ -329,19 +425,20 @@ export class ScanTree {
   /** Visits everything below i (not i itself), parents before their children. */
   forEachDescendant(i: number, visit: (j: number) => void): void {
     const { childStart, childList } = this.data;
+    const childEnd = this.childEnd;
     const stack = [i];
     while (stack.length > 0) {
       const p = stack.pop()!;
-      for (let k = childStart[p]; k < childStart[p + 1]; k++) {
+      for (let k = childStart[p]; k < childEnd[p]; k++) {
         const c = childList[k];
         visit(c);
-        if (childStart[c + 1] > childStart[c]) stack.push(c);
+        if (childEnd[c] > childStart[c]) stack.push(c);
       }
     }
   }
 
   private computeCategories(): Uint8Array {
-    const { names, parent, isDir, size } = this.data;
+    const { names, parent, isDir, size, flags } = this.data;
     const n = names.length;
     const k = CATEGORIES.length;
     const slot = new Int32Array(n).fill(-1);
@@ -351,6 +448,7 @@ export class ScanTree {
     const result = new Uint8Array(n);
     const bytes = new Float64Array(dirs * k);
     for (let i = n - 1; i >= 0; i--) {
+      if ((flags[i] & FLAG_REMOVED) !== 0) continue;
       if (isDir[i]) {
         const base = slot[i] * k;
         let best = OTHER_INDEX;

@@ -69,6 +69,32 @@ describe('TreeRows', () => {
     expect(rows.entries[rows.expandTo(file)]).toBe(file);
   });
 
+  it('shows nothing of an entry that went to the Recycle Bin, after the rows are rebuilt', () => {
+    // A tree of its own: removing changes it.
+    const own = createDemoTree(Date.UTC(2026, 10, 3));
+    const biggest = topFiles(own, own.root, 1)[0];
+    const folder = own.parent(biggest);
+    const before = new TreeRows(own);
+    before.expandTo(biggest);
+    const parentSize = own.size(own.parent(folder));
+    const removal = own.remove(folder)!;
+    expect(own.size(own.parent(folder))).toBe(parentSize - removal.size);
+    const rows = new TreeRows(own, true, [...before.expanded].filter((e) => !own.removed(e)));
+    expect(rows.entries.some((e) => own.removed(e))).toBe(false);
+    expect(rows.entries).not.toContain(folder);
+    const check = (r: TreeRows) => {
+      const entries: number[] = [];
+      const visit = (i: number) => {
+        entries.push(i);
+        if (r.expanded.has(i)) for (const c of own.children(i)) visit(c);
+      };
+      visit(own.root);
+      return entries;
+    };
+    expect(rows.entries).toEqual(check(rows));
+    expect(rows.setSize(own.children(own.parent(folder))[0] ?? own.root)).toBe(own.childCount(own.parent(folder)) || 1);
+  });
+
   it('stays consistent through a random sequence of toggles', () => {
     const rows = new TreeRows(tree);
     let seed = 7;

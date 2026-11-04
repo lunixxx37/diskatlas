@@ -1,7 +1,16 @@
 // Everything the user interface needs from the scanning and analysis code.
 
 export { CATEGORIES, categoryOfExt, extOf, type Category, type CategoryId } from './categories';
-export { ScanTree, type HelperScanInfo, type ScanMeta, type ScanSource } from './tree';
+export { ScanTree, type HelperScanInfo, type Removal, type ScanMeta, type ScanSource } from './tree';
+export {
+  DEFAULT_DUPLICATE_OPTIONS,
+  findDuplicates,
+  inSystemFolder,
+  isSystemFolder,
+  type DuplicateGroup,
+  type DuplicateOptions,
+  type DuplicateResult,
+} from './duplicates';
 export type { ScanProgress } from './protocol';
 export {
   dirHandleFromDrop,
@@ -44,12 +53,20 @@ export {
   HelperClient,
   HelperError,
   findHelper,
+  hasFeature,
+  helperPath,
+  isDriveRoot,
   loopbackPermission,
+  recycleItem,
   scanWithHelper,
   type HelperDrive,
   type HelperDriveType,
   type HelperElevation,
   type HelperFailure,
+  type HelperFeature,
   type HelperInfo,
   type LoopbackPermission,
+  type RecycleItem,
+  type RecycleResult,
+  type RecycleStatus,
 } from './helper';

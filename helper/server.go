@@ -78,6 +78,10 @@ type serverConfig struct {
 	workers     int
 	elevateArgs []string     // arguments for the elevated instance
 	exit        func(string) // asks the helper to shut down, with a reason for the log
+	// recycle and reveal are the clean-up actions; nil where the system has
+	// none (then /v1/info doesn't list them and their endpoints are unknown).
+	recycle recycleSystem
+	reveal  func(path string) error
 }
 
 // server implements the helper's HTTP API.
@@ -94,6 +98,7 @@ type server struct {
 	cur    *scan // the only scan; nil before the first one
 
 	elevateMu sync.Mutex
+	recycleMu sync.Mutex // one recycle request at a time
 }
 
 func newServer(cfg serverConfig) *server {
@@ -222,6 +227,10 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		s.handleResult(w, seg[1])
 	case len(seg) == 3 && seg[0] == "scans" && seg[2] == "cancel" && post:
 		s.handleCancel(w, r, seg[1])
+	case len(seg) == 1 && seg[0] == "reveal" && post && s.reveal != nil:
+		s.handleReveal(w, r)
+	case len(seg) == 1 && seg[0] == "recycle" && post && s.recycle != nil:
+		s.handleRecycle(w, r)
 	case len(seg) == 1 && seg[0] == "elevate" && post:
 		s.handleElevate(w, r)
 	case len(seg) == 1 && seg[0] == "shutdown" && post:
@@ -238,14 +247,15 @@ func (s *server) notFound(w http.ResponseWriter) {
 }
 
 type infoJSON struct {
-	App                string `json:"app"`
-	Version            string `json:"version"`
-	Protocol           int    `json:"protocol"`
-	OS                 string `json:"os"`
-	Arch               string `json:"arch"`
-	Elevated           bool   `json:"elevated"`
-	PID                int    `json:"pid"`
-	IdleTimeoutSeconds int64  `json:"idleTimeoutSeconds"`
+	App                string   `json:"app"`
+	Version            string   `json:"version"`
+	Protocol           int      `json:"protocol"`
+	OS                 string   `json:"os"`
+	Arch               string   `json:"arch"`
+	Elevated           bool     `json:"elevated"`
+	PID                int      `json:"pid"`
+	IdleTimeoutSeconds int64    `json:"idleTimeoutSeconds"`
+	Features           []string `json:"features"`
 }
 
 func (s *server) handleInfo(w http.ResponseWriter) {
@@ -258,7 +268,120 @@ func (s *server) handleInfo(w http.ResponseWriter) {
 		Elevated:           s.sys.elevated(),
 		PID:                os.Getpid(),
 		IdleTimeoutSeconds: int64(s.idle / time.Second),
+		Features:           s.features(),
 	})
+}
+
+// features lists the actions this helper offers; the website offers only these.
+func (s *server) features() []string {
+	f := []string{"scan"}
+	if s.reveal != nil {
+		f = append(f, "reveal")
+	}
+	if s.recycle != nil {
+		f = append(f, "recycle")
+	}
+	return f
+}
+
+// handleReveal opens File Explorer with the item selected.
+func (s *server) handleReveal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path *string `json:"path"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if req.Path == nil || *req.Path == "" {
+		writeError(w, http.StatusBadRequest, codeBadRequest, "the path is missing")
+		return
+	}
+	p, err := cleanWindowsPath(*req.Path)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, codeBadRequest, err.Error())
+		return
+	}
+	switch err := s.reveal(p); {
+	case err == nil:
+		writeJSON(w, http.StatusOK, struct{}{})
+	case errors.Is(err, errPathNotFound):
+		writeError(w, http.StatusNotFound, codeNotFound, "the item does not exist: "+p)
+	case errors.Is(err, errPathInvalid):
+		writeError(w, http.StatusBadRequest, codeBadRequest, err.Error())
+	default:
+		s.logger.Printf("error: could not show an item in File Explorer: %v", err)
+		writeError(w, http.StatusInternalServerError, codeInternal, err.Error())
+	}
+}
+
+// handleRecycle checks items and moves those that pass to the Recycle Bin
+// (docs/helper-protocol.md, POST /v1/recycle). Requests run one at a time.
+func (s *server) handleRecycle(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Items  []recycleItem `json:"items"`
+		DryRun bool          `json:"dryRun"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if n := len(req.Items); n < 1 || n > maxRecycleItems {
+		writeError(w, http.StatusBadRequest, codeBadRequest, fmt.Sprintf("items must hold 1 to %d entries, not %d", maxRecycleItems, n))
+		return
+	}
+	for i, it := range req.Items {
+		if it.IsDir == nil || (!*it.IsDir && (it.Size == nil || it.Mtime == nil)) {
+			writeError(w, http.StatusBadRequest, codeBadRequest, fmt.Sprintf("item %d needs isDir, and for a file also size and mtime", i))
+			return
+		}
+	}
+	s.recycleMu.Lock()
+	defer s.recycleMu.Unlock()
+	results, err := runRecycle(s.recycle, req.Items, req.DryRun)
+	if err != nil {
+		s.logger.Printf("error: recycle: %v", err)
+		writeError(w, http.StatusInternalServerError, codeInternal, err.Error())
+		return
+	}
+	s.logRecycle(req.Items, results, req.DryRun)
+	writeJSON(w, http.StatusOK, struct {
+		Results []recycleResult `json:"results"`
+	}{results})
+}
+
+// logRecycle logs every item of a real recycle with its path, status and
+// size; the user picked these paths. A dry run gets one line of counts.
+func (s *server) logRecycle(items []recycleItem, results []recycleResult, dryRun bool) {
+	if dryRun {
+		counts := map[string]int{}
+		var order []string
+		for _, r := range results {
+			if counts[r.Status] == 0 {
+				order = append(order, r.Status)
+			}
+			counts[r.Status]++
+		}
+		parts := make([]string, len(order))
+		for i, st := range order {
+			parts[i] = fmt.Sprintf("%d %s", counts[st], st)
+		}
+		s.logger.Printf("recycle check (dry run): %s", strings.Join(parts, ", "))
+		return
+	}
+	for i, r := range results {
+		what := "file"
+		if *items[i].IsDir {
+			what = "folder"
+		}
+		size := ""
+		if items[i].Size != nil {
+			size = fmt.Sprintf(", %.0f bytes", *items[i].Size)
+		}
+		msg := ""
+		if r.Message != "" {
+			msg = ": " + r.Message
+		}
+		s.logger.Printf("recycle %s (%s%s): %s%s", r.Path, what, size, r.Status, msg)
+	}
 }
 
 func (s *server) handleDrives(w http.ResponseWriter) {

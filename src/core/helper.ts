@@ -3,6 +3,9 @@ import type { ScanProgress } from './protocol';
 import { decodeHelperResultInWorker, type RunningScan } from './scanner';
 import { ScanTree, type ScanMeta } from './tree';
 
+// Scanning only reads. The helper changes files in exactly one case: when the user has
+// confirmed on this page that an item goes to the Recycle Bin (`recycle`); never permanently.
+
 // The website side of the DiskAtlas Helper (docs/helper-protocol.md): a small Windows
 // program that serves scans over HTTP on 127.0.0.1. Every request is a *simple* CORS
 // request (GET without custom headers, POST with a text/plain JSON body), is made from
@@ -25,6 +28,62 @@ export interface HelperInfo {
   elevated: boolean;
   pid: number;
   idleTimeoutSeconds: number;
+  /** What this helper can do: "scan", and in newer versions "reveal" and "recycle". */
+  features: string[];
+}
+
+/** Optional abilities a helper lists in /v1/info `features`. */
+export type HelperFeature = 'scan' | 'reveal' | 'recycle';
+
+export function hasFeature(info: Pick<HelperInfo, 'features'> | undefined | null, feature: HelperFeature): boolean {
+  return !!info && info.features.includes(feature);
+}
+
+/**
+ * One item for POST /v1/recycle: where it is and what the scan saw there. Files carry
+ * `size` and `mtime` exactly as the scan result had them; folders carry neither.
+ */
+export interface RecycleItem {
+  path: string;
+  isDir: boolean;
+  size?: number;
+  mtime?: number;
+}
+
+/**
+ * The helper's verdict on an item: `ok` (dry run: would go), `recycled`, `failed` (with a
+ * message, e.g. Windows' "delete permanently?" was declined), or the first check that
+ * failed: `invalid`, `not_found`, `changed`, `protected`, `unsupported`.
+ */
+export type RecycleStatus = 'ok' | 'recycled' | 'failed' | 'invalid' | 'not_found' | 'changed' | 'protected' | 'unsupported';
+
+const RECYCLE_STATUSES: readonly RecycleStatus[] = ['ok', 'recycled', 'failed', 'invalid', 'not_found', 'changed', 'protected', 'unsupported'];
+
+export interface RecycleResult {
+  path: string;
+  status: RecycleStatus;
+  message: string;
+}
+
+/**
+ * An entry's full Windows path for the helper, in the exact clean form /v1/recycle accepts:
+ * upper-case drive letter, backslashes only, no trailing separator, no "." or "..", no
+ * prefix. A helper scan's root name is the scanned path itself ("C:" for a drive, so its
+ * children are "C:\\…"); the bare "C:" of a drive root is not a valid item path.
+ */
+export function helperPath(tree: ScanTree, i: number): string {
+  return tree.path(i, '\\').replace(/^([a-z]):/, (_, letter: string) => `${letter.toUpperCase()}:`);
+}
+
+/** A bare drive letter ("C:"): the root of a drive scan. */
+export function isDriveRoot(path: string): boolean {
+  return /^[A-Za-z]:$/.test(path);
+}
+
+/** The recycle item for an entry: files with size and date exactly as scanned, folders without. */
+export function recycleItem(tree: ScanTree, i: number): RecycleItem {
+  const path = helperPath(tree, i);
+  return tree.isDir(i) ? { path, isDir: true } : { path, isDir: false, size: tree.size(i), mtime: tree.mtime(i) };
 }
 
 export type HelperDriveType = 'fixed' | 'removable' | 'network' | 'cdrom' | 'ramdisk' | 'unknown';
@@ -189,6 +248,8 @@ export function asHelperInfo(value: unknown): HelperInfo | null {
     elevated: v.elevated === true,
     pid: typeof v.pid === 'number' ? v.pid : 0,
     idleTimeoutSeconds: typeof v.idleTimeoutSeconds === 'number' ? v.idleTimeoutSeconds : 0,
+    // A helper without `features` only scans.
+    features: Array.isArray(v.features) ? v.features.filter((f): f is string => typeof f === 'string') : ['scan'],
   };
 }
 
@@ -299,6 +360,26 @@ export class HelperClient {
     return { outcome: 'declined' };
   }
 
+  /** Opens File Explorer with the item selected (for a folder: its parent, with the folder selected). */
+  async reveal(path: string): Promise<void> {
+    await call(this.env, this.port, '/reveal', { method: 'POST', body: { path } });
+  }
+
+  /**
+   * Moves items to the Recycle Bin, or with `dryRun` only checks them. Call it for real only
+   * after the user confirmed. One result per item, in order.
+   */
+  async recycle(items: RecycleItem[], dryRun: boolean): Promise<RecycleResult[]> {
+    const body = await json<{ results?: unknown }>(await call(this.env, this.port, '/recycle', { method: 'POST', body: { items, dryRun } }));
+    if (!Array.isArray(body.results) || body.results.length !== items.length) throw new HelperError('wrong-server', 'The recycle results do not match the items.');
+    return body.results.map((r, k): RecycleResult => {
+      const v = (r ?? {}) as Partial<RecycleResult>;
+      const status = RECYCLE_STATUSES.includes(v.status as RecycleStatus) ? (v.status as RecycleStatus) : 'failed';
+      const message = typeof v.message === 'string' ? v.message : '';
+      return { path: typeof v.path === 'string' ? v.path : items[k].path, status, message: status === v.status ? message : message || `Unknown status "${String(v.status)}".` };
+    });
+  }
+
   async shutdown(): Promise<void> {
     await call(this.env, this.port, '/shutdown', { method: 'POST' });
   }
@@ -372,14 +453,14 @@ export function scanWithHelper(
     }
     if (progress.state === 'failed') throw new HelperError('http', progress.error || 'The scan failed.', 0, 'scan_failed');
     const buffer = await client.result(id);
-    const { version, elevated } = client.info;
+    const { version, elevated, features } = client.info;
     return decode(buffer, {
       rootName: '',
       source: 'helper',
       startedAt,
       durationMs: progress.elapsedMs ?? Date.now() - startedAt,
       complete: progress.state === 'done',
-      helper: { version, elevated },
+      helper: { version, elevated, features: [...features] },
     });
   })();
 

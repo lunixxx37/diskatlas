@@ -46,6 +46,9 @@ jobs:
           cache-dependency-path: helper/go.sum
       - run: go vet ./...
       - run: go test ./...
+        env:
+          # Lets the Windows tests move a temp file to the runner's Recycle Bin.
+          DISKATLAS_TEST_RECYCLE: '1'
       - name: Build DiskAtlas-Helper.exe
         if: runner.os == 'Windows'
         run: go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=0.1.0-ci.${{ github.run_number }}" -o bin/DiskAtlas-Helper.exe .

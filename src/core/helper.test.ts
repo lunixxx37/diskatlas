@@ -3,9 +3,14 @@ import { buildHelperResult } from './helper-format.fixture';
 import {
   HelperClient,
   HelperError,
+  asHelperInfo,
   decodeHere,
   findHelper,
+  hasFeature,
+  helperPath,
+  isDriveRoot,
   loopbackPermission,
+  recycleItem,
   scanWithHelper,
   type HelperEnvironment,
   type HelperInfo,
@@ -13,7 +18,7 @@ import {
 } from './helper';
 import type { ScanProgress } from './protocol';
 
-const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 4242, idleTimeoutSeconds: 600 };
+const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 4242, idleTimeoutSeconds: 600, features: ['scan', 'reveal', 'recycle'] };
 const url = (port: number, path: string) => `http://127.0.0.1:${port}/v1${path}`;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -181,6 +186,93 @@ describe('helper client', () => {
   });
 });
 
+describe('reveal and recycle', () => {
+  const PORT = 41417;
+  const item = { path: 'X:\\Users\\Ann\\Videos\\trip.mkv', isDir: false, size: 4509715660, mtime: 1730000000000 };
+
+  it('reads the features, counting a helper without them as scan-only', () => {
+    expect(asHelperInfo({ ...INFO, features: ['scan', 'reveal', 'recycle', 7] })!.features).toEqual(['scan', 'reveal', 'recycle']);
+    const old = asHelperInfo({ app: 'diskatlas-helper', protocol: 1, version: '0.1.0' })!;
+    expect(old.features).toEqual(['scan']);
+    expect(hasFeature(old, 'recycle')).toBe(false);
+    expect(hasFeature(INFO, 'reveal')).toBe(true);
+    expect(hasFeature(null, 'scan')).toBe(false);
+  });
+
+  it('reveals an item with a simple POST', async () => {
+    const page = fakePage({ [url(PORT, '/reveal')]: () => json({}) });
+    await new HelperClient(PORT, INFO, page.env).reveal(item.path);
+    const { init } = page.calls[0];
+    expect([init.method, init.headers, init.targetAddressSpace]).toEqual(['POST', undefined, 'loopback']);
+    expect(JSON.parse(init.body as string)).toEqual({ path: item.path });
+  });
+
+  it('reports a reveal of a path that is gone', async () => {
+    const page = fakePage({ [url(PORT, '/reveal')]: () => json({ error: { code: 'not_found', message: 'The path does not exist.' } }, 404) });
+    const error = await failure(new HelperClient(PORT, INFO, page.env).reveal(item.path));
+    expect([error.kind, error.code]).toEqual(['http', 'not_found']);
+  });
+
+  it('sends the items with dryRun and returns one result per item', async () => {
+    const page = fakePage({
+      [url(PORT, '/recycle')]: (init) => {
+        const body = JSON.parse(init.body as string);
+        return json({ results: body.items.map((i: { path: string }) => ({ path: i.path, status: body.dryRun ? 'ok' : 'recycled', message: '' })) });
+      },
+    });
+    const client = new HelperClient(PORT, INFO, page.env);
+    expect(await client.recycle([item], true)).toEqual([{ path: item.path, status: 'ok', message: '' }]);
+    expect(await client.recycle([item], false)).toEqual([{ path: item.path, status: 'recycled', message: '' }]);
+    const bodies = page.calls.map((c) => JSON.parse(c.init.body as string));
+    expect(bodies).toEqual([
+      { items: [item], dryRun: true },
+      { items: [item], dryRun: false },
+    ]);
+  });
+
+  it('passes every status through and turns unknown ones into failures', async () => {
+    const statuses = ['invalid', 'not_found', 'changed', 'protected', 'unsupported', 'failed', 'exploded'];
+    const page = fakePage({
+      [url(PORT, '/recycle')]: () => json({ results: statuses.map((status) => ({ path: item.path, status, message: status === 'failed' ? 'Permanent deletion was declined.' : '' })) }),
+    });
+    const results = await new HelperClient(PORT, INFO, page.env).recycle(statuses.map(() => item), false);
+    expect(results.map((r) => r.status)).toEqual(['invalid', 'not_found', 'changed', 'protected', 'unsupported', 'failed', 'failed']);
+    expect(results[5].message).toBe('Permanent deletion was declined.');
+    expect(results[6].message).toMatch(/exploded/);
+  });
+
+  it('rejects an answer that does not match the items', async () => {
+    const page = fakePage({ [url(PORT, '/recycle')]: () => json({ results: [] }) });
+    expect((await failure(new HelperClient(PORT, INFO, page.env).recycle([item], true))).kind).toBe('wrong-server');
+  });
+
+  it('builds exactly clean paths, also below a lower-case drive root', async () => {
+    const t = await decodeHere(
+      buildHelperResult({ names: ['x:\\Users\\Ann', 'Videos', 'trip.mkv'], parent: [-1, 0, 1], kind: [1, 1, 0], size: [0, 0, 5], mtime: [0, 0, 1730000000000.5] }),
+      { rootName: '', source: 'helper', startedAt: 0, durationMs: 0, complete: true },
+    );
+    expect(helperPath(t, 2)).toBe('X:\\Users\\Ann\\Videos\\trip.mkv');
+    expect(isDriveRoot(helperPath(t, 0))).toBe(false);
+    // The date goes back exactly as it came, fractions included.
+    expect(JSON.parse(JSON.stringify(recycleItem(t, 2))).mtime).toBe(1730000000000.5);
+  });
+
+  it('builds full Windows paths and the values the helper checks', () => {
+    const tree = decodeHere(
+      buildHelperResult({ names: ['X:', 'Users', 'a.bin'], parent: [-1, 0, 1], kind: [1, 1, 0], size: [0, 0, 1234], mtime: [0, 0, 1730000000000] }),
+      { rootName: '', source: 'helper', startedAt: 0, durationMs: 0, complete: true },
+    );
+    return tree.then((t) => {
+      expect(helperPath(t, 0)).toBe('X:');
+      expect(isDriveRoot(helperPath(t, 0))).toBe(true);
+      expect(helperPath(t, 2)).toBe('X:\\Users\\a.bin');
+      expect(recycleItem(t, 2)).toEqual({ path: 'X:\\Users\\a.bin', isDir: false, size: 1234, mtime: 1730000000000 });
+      // Folders carry neither size nor date.
+      expect(recycleItem(t, 1)).toEqual({ path: 'X:\\Users', isDir: true });
+    });
+  });
+});
+
 describe('scans by the helper', () => {
   const PORT = 41418;
   const result = () =>
@@ -242,7 +334,7 @@ describe('scans by the helper', () => {
     expect(tree.name(0)).toBe('C:');
     expect(tree.size(0)).toBe(400);
     expect(tree.allocated(0)).toBe(8192);
-    expect(tree.meta).toMatchObject({ rootName: 'C:', source: 'helper', complete: true, durationMs: 20, helper: { version: '0.2.0', elevated: true } });
+    expect(tree.meta).toMatchObject({ rootName: 'C:', source: 'helper', complete: true, durationMs: 20, helper: { version: '0.2.0', elevated: true, features: ['scan', 'reveal', 'recycle'] } });
   });
 
   it('can be cancelled and then resolves with the part read so far', async () => {

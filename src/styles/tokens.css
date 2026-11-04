@@ -39,6 +39,13 @@
   --warn: #8a5300;
   /* Connected, ready: the helper status dot. */
   --ok: #2c7a4b;
+  /* Destructive actions (Move to Recycle Bin): fill, its hover, text on it, and as text. */
+  --danger: #b42318;
+  --danger-strong: #912018;
+  --on-danger: #ffffff;
+  --danger-text: #b42318;
+  /* Behind a modal dialog. */
+  --scrim: rgb(16 20 23 / 0.5);
   --warn-wash: rgb(176 112 20 / 0.1);
   --warn-line: rgb(138 83 0 / 0.35);
 
@@ -109,6 +116,11 @@
 
     --warn: #e0a64a;
     --ok: #5cbf86;
+    --danger: #c93a33;
+    --danger-strong: #b02a24;
+    --on-danger: #ffffff;
+    --danger-text: #ff8f85;
+    --scrim: rgb(0 0 0 / 0.62);
     --warn-wash: rgb(224 166 74 / 0.09);
     --warn-line: rgb(224 166 74 / 0.32);
 
@@ -170,6 +182,11 @@
 
   --warn: #e0a64a;
   --ok: #5cbf86;
+  --danger: #c93a33;
+  --danger-strong: #b02a24;
+  --on-danger: #ffffff;
+  --danger-text: #ff8f85;
+  --scrim: rgb(0 0 0 / 0.62);
   --warn-wash: rgb(224 166 74 / 0.09);
   --warn-line: rgb(224 166 74 / 0.32);
 

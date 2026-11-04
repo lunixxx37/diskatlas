@@ -9,8 +9,9 @@
 - **Folder tree** with size, share, number of files and last change, fast even for hundreds of thousands of entries
 - **Map** (treemap): every area is as large as the space it takes up; click a folder to zoom in, hover to see it highlighted in the tree
 - **Largest files**, **file types** by category and extension, and **file age**
+- **Possible duplicates**: files with the same name and size, grouped by the space you could free
 - **CSV export** of folders and files
-- **Read-only**: DiskAtlas never changes or deletes anything
+- **Read-only in the browser**: the website never changes anything. With the helper you can also show items in Explorer and move them to the Recycle Bin, always after confirming
 - Light and dark theme, English and German
 - An example drive to try it without picking a folder
 
@@ -29,7 +30,9 @@ Browsers protect some system locations and won't open them, for example the root
 
 ## DiskAtlas Helper (Windows)
 
-An optional small program for what the browser can't open: whole drives such as `C:\` and system folders. It has no window, only reads, and closes itself when it hasn't been used for a while. With it, DiskAtlas also shows the size on disk and marks links and OneDrive online-only files. Restarted as administrator, it can read protected folders too.
+An optional small program for what the browser can't open: whole drives such as `C:\` and system folders. It has no window and closes itself when it hasn't been used for a while. With it, DiskAtlas also shows the size on disk and marks links and OneDrive online-only files. Restarted as administrator, it can read protected folders too.
+
+Scanning only reads. The helper moves an item to the Recycle Bin only after you confirm it on the website, refuses system locations, and never deletes anything permanently by itself.
 
 The helper listens only on `127.0.0.1` (ports 41417–41419) and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
 

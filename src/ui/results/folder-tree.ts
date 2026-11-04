@@ -1,4 +1,5 @@
 import { formatBytes, formatCount, formatDate, formatPercent, type ScanTree } from '../../core';
+import type { EntryActions } from '../cleanup';
 import { h, setText, uniqueId } from '../dom';
 import { displayName, displayPath, splitPath } from '../format';
 import { lang, plural, t, type Lang } from '../i18n';
@@ -13,6 +14,8 @@ export interface FolderTreeState {
   selected: number;
   active: number;
   scrollTop: number;
+  /** After restoring, scroll the active row into view (the selection moved, e.g. after a recycle). */
+  reveal?: boolean;
 }
 
 export interface FolderTreeOptions {
@@ -25,6 +28,10 @@ export interface FolderTreeOptions {
   /** Pointer over a row (linked highlighting); -1 when it leaves. */
   onHover: (entry: number) => void;
   onCopy: (entry: number) => void;
+  /** Show in Explorer / Move to Recycle Bin in the selection bar (helper scans); null otherwise. */
+  actions?: EntryActions | null;
+  /** Right-click, the context-menu key or Shift+F10 on a row (after it was selected). */
+  onContextMenu?: (entry: number, at: { x: number; y: number }, returnFocus: HTMLElement) => void;
 }
 
 /** Browsers cap element heights (Firefox near 17.9 million px); taller lists scroll scaled. */
@@ -102,6 +109,8 @@ export class FolderTree {
   private readonly selTail: HTMLElement;
   private readonly selPath: HTMLElement;
   private readonly selFlag: HTMLElement;
+  private readonly selReveal: HTMLButtonElement | null = null;
+  private readonly selRecycle: HTMLButtonElement | null = null;
   private readonly idPrefix = uniqueId('ftree');
   private pool: RowView[] = [];
   private rowH = 30;
@@ -119,6 +128,8 @@ export class FolderTree {
   private typedAt = 0;
   /** Scroll position to restore once the list has a height; -1 = none. */
   private pendingScroll = -1;
+  /** Scroll the active row into view once the list has a height (after pendingScroll). */
+  private pendingReveal = false;
   private lastScroll = 0;
   private readonly dateWidth = DATE_WIDTH[lang()];
   private readonly hasAlloc: boolean;
@@ -132,6 +143,7 @@ export class FolderTree {
     this.activeEntry = state?.active ?? this.tree.root;
     this.selected = state?.selected ?? this.tree.root;
     this.pendingScroll = state?.scrollTop ?? -1;
+    this.pendingReveal = state?.reveal ?? false;
     this.lastScroll = Math.max(0, this.pendingScroll);
     this.syncActive();
     this.rowH = window.matchMedia('(pointer: coarse)').matches ? 40 : 30;
@@ -160,8 +172,15 @@ export class FolderTree {
       this.layer,
     );
 
-    const copyButton = h('button', { class: 'btn btn--ghost btn--sm', type: 'button' }, icon('copy'), t.tree.copyPath);
+    const copyButton = h('button', { class: 'btn btn--ghost btn--sm', type: 'button' }, icon('copy'), h('span', { class: 'selbar__label', text: t.tree.copyPath }));
     copyButton.addEventListener('click', () => options.onCopy(this.selected));
+    const actions = options.actions ?? null;
+    if (actions) {
+      this.selReveal = h('button', { class: 'btn btn--ghost btn--sm', type: 'button', hidden: true }, icon('folderOpen'), h('span', { class: 'selbar__label', text: t.cleanup.reveal }));
+      this.selReveal.addEventListener('click', () => actions.reveal(this.selected, this.selReveal));
+      this.selRecycle = h('button', { class: 'btn btn--ghost btn--sm selbar__recycle', type: 'button', hidden: true }, icon('trash'), h('span', { class: 'selbar__label', text: t.cleanup.recycle }));
+      this.selRecycle.addEventListener('click', () => actions.recycle(this.selected, this.selRecycle));
+    }
     this.selIcon = h('span', { class: 'selbar__icon' });
     this.selHead = h('span', { class: 'mtrunc__head' });
     this.selTail = h('span', { class: 'mtrunc__tail' });
@@ -182,7 +201,7 @@ export class FolderTree {
       h(
         'footer',
         { class: 'selbar' },
-        h('div', { class: 'selbar__main' }, this.selIcon, h('span', { class: 'sr-only', text: t.tree.selected }), this.selPath, copyButton),
+        h('div', { class: 'selbar__main' }, this.selIcon, h('span', { class: 'sr-only', text: t.tree.selected }), this.selPath, h('span', { class: 'selbar__tools' }, copyButton, this.selReveal, this.selRecycle)),
         this.selFlag,
       ),
     );
@@ -198,6 +217,7 @@ export class FolderTree {
     this.treeEl.addEventListener('click', this.onClick);
     this.treeEl.addEventListener('dblclick', this.onDoubleClick);
     this.treeEl.addEventListener('keydown', this.onKey);
+    this.treeEl.addEventListener('contextmenu', this.onContextMenu);
     this.treeEl.addEventListener('pointermove', this.onPointerMove);
     this.treeEl.addEventListener('pointerleave', () => this.setHovered(-1));
     this.treeEl.addEventListener('focus', () => this.schedule());
@@ -367,6 +387,11 @@ export class FolderTree {
       // Restored state: scroll back once the list is visible and as tall as before.
       this.treeEl.scrollTop = this.pendingScroll;
       this.pendingScroll = -1;
+      this.lastScroll = this.treeEl.scrollTop;
+    }
+    if (this.pendingReveal && this.treeEl.clientHeight > 0) {
+      this.pendingReveal = false;
+      this.ensureVisible(this.activeRow, true);
       this.lastScroll = this.treeEl.scrollTop;
     }
     const viewH = this.viewH || this.treeEl.clientHeight || 600;
@@ -634,6 +659,15 @@ export class FolderTree {
         event.preventDefault();
         this.options.onActivate(entry);
         return;
+      case 'ContextMenu':
+        event.preventDefault();
+        this.openRowMenu(row);
+        return;
+      case 'F10':
+        if (!event.shiftKey) return;
+        event.preventDefault();
+        this.openRowMenu(row);
+        return;
       case ' ': {
         // Never scroll the list away from the active row; a space can continue a type-ahead search.
         event.preventDefault();
@@ -676,6 +710,23 @@ export class FolderTree {
     return -1;
   }
 
+  private readonly onContextMenu = (event: MouseEvent): void => {
+    if (!this.options.onContextMenu) return;
+    const row = this.rowFromEvent(event);
+    if (row < 0) return;
+    event.preventDefault();
+    this.moveTo(row, 'pointer');
+    this.options.onContextMenu(this.rows.entries[row], { x: event.clientX, y: event.clientY }, this.treeEl);
+  };
+
+  /** From the keyboard: the menu opens at the focused row. */
+  private openRowMenu(row: number): void {
+    if (!this.options.onContextMenu) return;
+    const el = this.layer.querySelector<HTMLElement>(`.tr[data-row="${row}"]`);
+    const box = (el ?? this.treeEl).getBoundingClientRect();
+    this.options.onContextMenu(this.rows.entries[row], { x: box.left + 40, y: box.top + box.height / 2 }, this.treeEl);
+  }
+
   private updateSelectionBar(): void {
     const entry = this.selected;
     const path = displayPath(this.tree, entry);
@@ -690,5 +741,10 @@ export class FolderTree {
     const kind = entryFlag(this.tree, entry);
     this.selFlag.dataset.flag = kind;
     this.selFlag.replaceChildren(...(flag && kind ? [icon(FLAG_ICONS[kind]), flag] : []));
+    const actions = this.options.actions;
+    if (actions && this.selReveal && this.selRecycle) {
+      this.selReveal.hidden = !actions.canReveal(entry);
+      this.selRecycle.hidden = !actions.canRecycle(entry);
+    }
   }
 }

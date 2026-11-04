@@ -1,6 +1,8 @@
 # DiskAtlas Helper protocol (v1)
 
-The DiskAtlas Helper is a small Windows program without a window. It lets the website survey what the browser can't open: whole drives such as `C:\`, system folders, and the space files take up on disk. It only reads; it never changes or deletes anything.
+The DiskAtlas Helper is a small Windows program without a window. It lets the website survey what the browser can't open: whole drives such as `C:\`, system folders, and the space files take up on disk.
+
+Scanning only reads. The helper changes files in exactly one case: when the user confirms on the website that an item should go to the Recycle Bin (see `/v1/recycle`). It never deletes anything permanently by itself.
 
 The website talks to it over HTTP on the loopback interface. This document is the contract between the two sides: `helper/` (Go) and `src/core/helper*.ts` (TypeScript).
 
@@ -78,11 +80,12 @@ Any 4xx or 5xx response from an allowed origin has this JSON body:
   "arch": "amd64",
   "elevated": false,
   "pid": 4242,
-  "idleTimeoutSeconds": 600
+  "idleTimeoutSeconds": 600,
+  "features": ["scan", "reveal", "recycle"]
 }
 ```
 
-The website treats a server as the helper only if `app` is `"diskatlas-helper"` and `protocol` is `1`.
+The website treats a server as the helper only if `app` is `"diskatlas-helper"` and `protocol` is `1`. It offers an action only if `features` lists it. A helper without `features` counts as `["scan"]`.
 
 ### `GET /v1/drives`
 
@@ -152,6 +155,75 @@ Only one scan exists at a time. Starting a new scan cancels and discards the pre
 ### `POST /v1/scans/{id}/cancel`
 
 Returns `202` with the progress object, which already says `cancelled`. The result is frozen at that moment and can be fetched as a partial result.
+
+### `POST /v1/reveal`
+
+Request body: `{ "path": "C:\\Users\\Ann\\Videos\\trip.mkv" }`
+
+Opens File Explorer with the item selected; for a folder, its parent opens with the folder selected. It uses `SHOpenFolderAndSelectItems`, so nothing is executed or opened with an app.
+
+Returns `200` with `{}`. Errors: `400 bad_request`, `404 not_found`, and `500 internal` if the shell call fails. It accepts the same path forms as scans.
+
+### `POST /v1/recycle`
+
+Moves items to the Windows Recycle Bin. The website calls this only after the user has confirmed it in a dialog.
+
+Request body:
+
+```json
+{
+  "items": [
+    { "path": "C:\\Users\\Ann\\Videos\\trip.mkv", "isDir": false, "size": 4509715660, "mtime": 1730000000000 }
+  ],
+  "dryRun": false
+}
+```
+
+- `items`: 1 to 100 entries. `isDir`, `size` and `mtime` are the values from the scan result. Folders don't need `size` and `mtime`.
+- Paths must be exactly in clean form: an upper-case drive letter, backslashes only, no trailing `\`, no `.` or `..` parts, no `\\?\` or `\\.\` prefix. Anything else, including a bare `C:`, is `invalid`.
+- `dryRun: true` runs every check below but changes nothing. The website uses it when the dialog opens, to show warnings in advance. A missing `dryRun` counts as `false`.
+- A malformed request returns `400 bad_request`: fewer than 1 or more than 100 items, `isDir` missing, a file without `size` or `mtime`, or wrong types.
+
+The helper opens each item once, for its attributes only, using backup semantics and without following reparse points, so cloud files are never downloaded. Type, size, last write time, reparse tag and the final path all come from that one handle.
+
+The helper checks each item in this order, and the first check that fails sets its status:
+
+| Status | Check |
+| --- | --- |
+| `invalid` | the path is absolute, clean and not a device path |
+| `not_found` | the item still exists |
+| `changed` | it is still a folder or a file, as `isDir` says. A file must also have the same `size`, and an `mtime` within 2 seconds of the scan. Folders are not compared in depth |
+| `protected` | it is not in a protected location (see below) |
+| `unsupported` | all of these hold: it is on a local fixed drive (so not removable, network or SUBST), which has a Recycle Bin; its path fits the shell's limit of 259 characters; it is not itself a link; it isn't reached through a link or an 8.3 short name, so its final path equals the requested path; and Windows reads its name the same way, so the name doesn't end in a dot or space and isn't a device name such as `NUL` |
+
+If every check passes, the item gets `ok` in a dry run. Otherwise it goes to the Recycle Bin and gets `recycled`, or `failed` with a message. After a reported success the helper checks that the item is really gone. If it isn't, the status is `failed` with "the item is still there". `failed` can also come from a dry run, for an item that can't even be opened for its attributes: "could not check the item".
+
+Messages are in English.
+
+Response: `200` with one result per item, in the same order:
+
+```json
+{ "results": [ { "path": "C:\\Users\\Ann\\Videos\\trip.mkv", "status": "recycled", "message": "" } ] }
+```
+
+**Protected locations** can never be recycled, as administrator neither:
+
+- every drive root, and `$Recycle.Bin` and `System Volume Information` with everything inside;
+- `pagefile.sys`, `hiberfil.sys`, `swapfile.sys` and `DumpStack.log.tmp` in a drive root;
+- `%SystemRoot%` (`C:\Windows`), `%ProgramFiles%` and `%ProgramFiles(x86)%`, each with everything inside;
+- these folders themselves, while their contents are allowed: `%ProgramData%`, the users folder (`C:\Users`), every user profile folder, and each profile's `AppData`, `AppData\Local`, `AppData\Roaming`, `Desktop`, `Documents`, `Downloads`, `Pictures`, `Music` and `Videos`;
+- the current user's real Desktop, Documents, Downloads, Pictures, Music, Videos and AppData folders themselves, also when they are redirected elsewhere;
+- the helper's own exe, its folder, and every folder above it up to the drive root.
+
+Every entry in the users folder counts as a profile, including links such as `All Users`. Protection is checked against both the requested path and the final path, ignoring case the way NTFS does.
+
+On systems other than Windows, `features` is `["scan"]` and both endpoints are unknown (`404`).
+
+**Never permanently:** the helper uses `SHFileOperationW` with `FO_DELETE` and `FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI | FOF_WANTNUKEWARNING`.
+
+- `FOF_ALLOWUNDO` sends items to the Recycle Bin.
+- If Windows would have to delete an item permanently anyway, for example because it is too big for the Recycle Bin, `FOF_WANTNUKEWARNING` makes Windows ask the user first. If the user says no, nothing happens and the status is `failed`, with a message saying so.
+- Items are handled one at a time, so a failure doesn't affect the others.
 
 ### `POST /v1/elevate`
 

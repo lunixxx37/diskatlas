@@ -415,7 +415,7 @@
   container: panemain / inline-size;
 }
 
-@container panemain (max-width: 560px) {
+@container panemain (max-width: 640px) {
   .tab__long {
     display: none;
   }
@@ -432,8 +432,8 @@
   }
 }
 
-/* The narrow layout has a fifth tab (Ordner): its long labels need about 575 px. */
-@container panemain (max-width: 600px) {
+/* The narrow layout has a sixth tab (Folders): its long labels need about 700 px. */
+@container panemain (max-width: 740px) {
   .workspace[data-layout="tabs"] .tab__long {
     display: none;
   }
@@ -450,7 +450,7 @@
   }
 }
 
-@container panemain (max-width: 440px) {
+@container panemain (max-width: 520px) {
   .workspace[data-layout="tabs"] .tabs {
     padding: 0 4px;
   }
@@ -463,16 +463,32 @@
   }
 }
 
+/* Phones: the six short labels share the strip's width (German needs about 300 px at 360).
+   The selectors match the narrow layout's rules above in weight, so these come last and win. */
 @container panemain (max-width: 380px) {
-  .tabs {
+  .workspace .pane--main .tabs {
+    gap: 0;
+    padding: 0 2px;
+  }
+  .workspace .pane--main .tab {
+    flex: 1 1 auto;
+    justify-content: center;
     padding: 0 4px;
+    font-size: 12.5px;
   }
-  .tab {
-    padding: 0 7px;
-    font-size: 13px;
+  .workspace .pane--main .tab::after {
+    right: 4px;
+    left: 4px;
   }
-  .tab svg {
+  .workspace .pane--main .tab svg {
     display: none;
+  }
+}
+
+@container panemain (max-width: 330px) {
+  .workspace .pane--main .tab {
+    padding: 0 3px;
+    font-size: 12px;
   }
 }
 

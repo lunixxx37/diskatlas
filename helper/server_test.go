@@ -245,6 +245,7 @@ func TestInfo(t *testing.T) {
 		"elevated":           false,
 		"pid":                float64(os.Getpid()),
 		"idleTimeoutSeconds": float64(600),
+		"features":           []any{"scan"}, // no clean-up actions configured
 	}
 	if !reflect.DeepEqual(v, want) {
 		t.Errorf("info = %v\nwant %v", v, want)

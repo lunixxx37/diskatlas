@@ -34,3 +34,8 @@ func openURL(u string) error {
 }
 
 func attachConsole() {}
+
+// No Recycle Bin and no File Explorer here: the features stay ["scan"].
+func platformRecycle() recycleSystem { return nil }
+
+func platformReveal() func(string) error { return nil }

@@ -1,4 +1,5 @@
 import { formatBytes, formatDate, formatPercent, type ScanTree } from '../../core';
+import { entryButtons, type EntryActions } from '../cleanup';
 import { h } from '../dom';
 import { displayName, folderBelow, splitPath } from '../format';
 import { t } from '../i18n';
@@ -12,6 +13,8 @@ export interface TopFilesOptions {
   /** Show the file in the folder tree. */
   onReveal: (entry: number) => void;
   onExport: (folder: number) => void;
+  /** Show in Explorer / Move to Recycle Bin per row (helper scans); null otherwise. */
+  actions?: EntryActions | null;
 }
 
 /** "Largest files": the 100 largest files anywhere below the current folder. */
@@ -42,6 +45,7 @@ export class TopFilesPanel {
     if (folder === this.folder) return;
     this.folder = folder;
     const { tree, cache } = this.options;
+    const actions = this.options.actions ?? null;
     const files = cache.topFiles(folder);
     this.title.replaceChildren(
       files.length >= 100 ? t.top.title100 : t.top.title,
@@ -88,6 +92,7 @@ export class TopFilesPanel {
           where ? h('span', { class: 'mtrunc mono', title: where }, h('span', { class: 'mtrunc__head', text: head }), h('span', { class: 'mtrunc__tail', text: tail })) : h('span', { class: 'muted', text: t.top.rightHere }),
         ),
         h('td', { class: 'c-date num', text: formatDate(tree.mtime(i)) }),
+        actions ? h('td', { class: 'c-actions' }, entryButtons(actions, tree, i)) : null,
       );
     });
     this.body.replaceChildren(
@@ -107,6 +112,7 @@ export class TopFilesPanel {
             h('th', { class: 'c-share', scope: 'col', text: t.top.colShare }),
             h('th', { class: 'c-folder', scope: 'col', text: t.top.colFolder }),
             h('th', { class: 'c-date', scope: 'col', text: t.top.colModified }),
+            actions ? h('th', { class: 'c-actions', scope: 'col' }, h('span', { class: 'sr-only', text: t.cleanup.menu })) : null,
           ),
         ),
         h('tbody', null, ...rows),
