@@ -1,6 +1,8 @@
 import { APP_NAME } from './brand';
 import { h, rich } from './dom';
 import { createHeroMap } from './hero-map';
+import type { HelperLink } from './helper-link';
+import { HelperPanel } from './helper-panel';
 import { t } from './i18n';
 import { icon } from './icons';
 
@@ -13,6 +15,8 @@ export interface StartViewOptions {
   onDemo: () => void;
   /** Open "Good to know" right away (it was open before the language changed). */
   knowOpen?: boolean;
+  /** The DiskAtlas Helper section (Windows desktops only). */
+  helper?: { link: HelperLink; onSurvey: (path: string, id: string) => void } | null;
 }
 
 export class StartView {
@@ -21,6 +25,7 @@ export class StartView {
   private readonly hint: HTMLElement;
   private readonly idleHint: string;
   private readonly know: HTMLDetailsElement;
+  private readonly helper: HelperPanel | null;
 
   constructor(options: StartViewOptions) {
     const { support } = options;
@@ -65,10 +70,12 @@ export class StartView {
 
     this.know = goodToKnow();
     this.know.open = options.knowOpen ?? false;
+    this.helper = options.helper ? new HelperPanel(options.helper.link, options.helper.onSurvey) : null;
     this.el = h(
       'main',
       { class: 'view view--start', id: 'main' },
       h('section', { class: 'start', 'aria-labelledby': 'start-title' }, intro, figure),
+      this.helper?.el,
       trustRow(),
       this.know,
     );
@@ -86,7 +93,7 @@ export class StartView {
   }
 
   destroy(): void {
-    // Nothing to release: no timers or listeners outside this element.
+    this.helper?.destroy();
   }
 }
 

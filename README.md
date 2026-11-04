@@ -25,7 +25,23 @@ DiskAtlas runs entirely on your device. The scan reads only names, sizes and mod
 | Chrome, Edge and other Chromium browsers | Full: pick a folder or drag it onto the page |
 | Firefox, Safari | Limited: the folder is read through the browser's standard folder dialog |
 
-Browsers protect some system locations and won't open them, for example the root of drive `C:\`, the Windows and program folders, and AppData. Other drives and your own folders work. Sizes are the logical file sizes, as Windows Explorer shows them (1 KB = 1,024 bytes).
+Browsers protect some system locations and won't open them, for example the root of drive `C:\`, the Windows and program folders, and AppData. Other drives and your own folders work. For the protected locations there is the DiskAtlas Helper (below). Sizes are the logical file sizes, as Windows Explorer shows them (1 KB = 1,024 bytes).
+
+## DiskAtlas Helper (Windows)
+
+An optional small program for what the browser can't open: whole drives such as `C:\` and system folders. It has no window, only reads, and closes itself when it hasn't been used for a while. With it, DiskAtlas also shows the size on disk and marks links and OneDrive online-only files. Restarted as administrator, it can read protected folders too.
+
+The helper listens only on `127.0.0.1` (ports 41417–41419) and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
+
+Building it requires Go 1.25 or newer:
+
+```bash
+cd helper
+go test ./...
+go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=0.1.0" -o bin/DiskAtlas-Helper.exe .
+```
+
+While working on the website with `npm run dev`, start it with `bin/DiskAtlas-Helper.exe --dev --serve --no-open`.
 
 ## Development
 
@@ -43,6 +59,7 @@ The code is plain TypeScript without a UI framework:
 - `src/core`: scanning in a Web Worker via the File System Access API, the tree model, treemap layout, analyses, formatting and CSV export
 - `src/ui`: views and components
 - `src/styles`: CSS with design tokens
+- `helper`: the DiskAtlas Helper for Windows, in Go
 
 ## Deutsch
 

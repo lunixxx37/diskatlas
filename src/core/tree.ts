@@ -5,8 +5,20 @@ import { PATH_SEP } from './format';
 export const FLAG_UNREADABLE = 1;
 /** The folder was not descended into because it is nested too deeply. */
 export const FLAG_TOO_DEEP = 2;
+/** A symbolic link, junction or mount point: listed, but not followed (helper scans). */
+export const FLAG_LINK = 4;
+/** An online-only placeholder (e.g. OneDrive Files On-Demand): real size, nothing on disk (helper scans). */
+export const FLAG_CLOUD = 8;
 
-export type ScanSource = 'picker' | 'files' | 'demo';
+/** 'helper': read by the DiskAtlas Helper for Windows (docs/helper-protocol.md). */
+export type ScanSource = 'picker' | 'files' | 'demo' | 'helper';
+
+/** The helper that made a scan. */
+export interface HelperScanInfo {
+  version: string;
+  /** Ran with administrator rights, so it could read more folders. */
+  elevated: boolean;
+}
 
 export interface ScanMeta {
   rootName: string;
@@ -16,6 +28,8 @@ export interface ScanMeta {
   durationMs: number;
   /** false when the scan was cancelled and only part of the folder was read. */
   complete: boolean;
+  /** Only for source 'helper'. */
+  helper?: HelperScanInfo;
 }
 
 /**
@@ -35,6 +49,8 @@ export interface ScanData {
   size: Float64Array;
   /** Last modified (epoch ms); for folders the newest file inside; 0 = unknown. */
   mtime: Float64Array;
+  /** Size on disk in bytes; for folders the total of everything inside. Only helper scans have it. */
+  allocated?: Float64Array;
   /** Files in the whole subtree (folders only). */
   fileCount: Uint32Array;
   /** Sub-folders in the whole subtree (folders only). */
@@ -42,6 +58,11 @@ export interface ScanData {
   /** Children of entry i are childList[childStart[i] .. childStart[i + 1]), largest first. */
   childStart: Int32Array;
   childList: Int32Array;
+}
+
+export interface TreeBuilderOptions {
+  /** Also record each file's size on disk (`addFile`'s last argument). */
+  allocated?: boolean;
 }
 
 /** Collects entries during a scan; `finish()` turns them into `ScanData`. */
@@ -52,12 +73,18 @@ export class TreeBuilder {
   readonly flags: number[] = [];
   readonly size: number[] = [];
   readonly mtime: number[] = [];
+  /** Size on disk per entry, or null when this scan does not record it. */
+  readonly allocated: number[] | null;
   /** Running totals, for progress reports. */
   files = 0;
   dirs = 0;
   bytes = 0;
   errors = 0;
   lastDir = 0;
+
+  constructor(options: TreeBuilderOptions = {}) {
+    this.allocated = options.allocated ? [] : null;
+  }
 
   get count(): number {
     return this.names.length;
@@ -70,10 +97,11 @@ export class TreeBuilder {
     return this.lastDir;
   }
 
-  addFile(parent: number, name: string, size: number, mtime: number): number {
+  /** `allocated`: size on disk, kept only when the builder records it. */
+  addFile(parent: number, name: string, size: number, mtime: number, allocated = 0): number {
     this.files++;
     this.bytes += size;
-    return this.push(parent, name, 0, size, mtime);
+    return this.push(parent, name, 0, size, mtime, allocated);
   }
 
   flag(index: number, flag: number): void {
@@ -93,6 +121,7 @@ export class TreeBuilder {
     const isDir = Uint8Array.from(this.isDir);
     const size = Float64Array.from(this.size);
     const mtime = Float64Array.from(this.mtime);
+    const allocated = this.allocated ? Float64Array.from(this.allocated) : undefined;
     const fileCount = new Uint32Array(n);
     const dirCount = new Uint32Array(n);
 
@@ -101,6 +130,7 @@ export class TreeBuilder {
     for (let i = n - 1; i > 0; i--) {
       const p = parent[i];
       size[p] += size[i];
+      if (allocated) allocated[p] += allocated[i];
       if (mtime[i] > mtime[p]) mtime[p] = mtime[i];
       if (isDir[i]) {
         fileCount[p] += fileCount[i];
@@ -124,7 +154,7 @@ export class TreeBuilder {
       if (childStart[i + 1] - childStart[i] > 1) childList.subarray(childStart[i], childStart[i + 1]).sort(bySize);
     }
 
-    return {
+    const data: ScanData = {
       meta,
       names,
       parent,
@@ -137,9 +167,11 @@ export class TreeBuilder {
       childStart,
       childList,
     };
+    if (allocated) data.allocated = allocated;
+    return data;
   }
 
-  private push(parent: number, name: string, isDir: number, size: number, mtime: number): number {
+  private push(parent: number, name: string, isDir: number, size: number, mtime: number, allocated = 0): number {
     const index = this.names.length;
     this.names.push(name);
     this.parent.push(parent);
@@ -147,6 +179,7 @@ export class TreeBuilder {
     this.flags.push(0);
     this.size.push(size);
     this.mtime.push(mtime);
+    this.allocated?.push(isDir ? 0 : allocated);
     return index;
   }
 }
@@ -163,6 +196,7 @@ export function transferablesOf(data: ScanData): ArrayBuffer[] {
     data.dirCount,
     data.childStart,
     data.childList,
+    ...(data.allocated ? [data.allocated] : []),
   ].map((array) => array.buffer as ArrayBuffer);
 }
 
@@ -204,6 +238,16 @@ export class ScanTree {
     return this.data.mtime[i];
   }
 
+  /** True when the scan knows sizes on disk (helper scans). */
+  get hasAllocated(): boolean {
+    return this.data.allocated !== undefined;
+  }
+
+  /** Size on disk in bytes; for folders the total of everything inside; 0 when unknown. */
+  allocated(i: number): number {
+    return this.data.allocated ? this.data.allocated[i] : 0;
+  }
+
   /** Files in the whole subtree (0 for files). */
   fileCount(i: number): number {
     return this.data.fileCount[i];
@@ -220,6 +264,16 @@ export class ScanTree {
 
   tooDeep(i: number): boolean {
     return (this.data.flags[i] & FLAG_TOO_DEEP) !== 0;
+  }
+
+  /** A link, junction or mount point that was not followed. */
+  link(i: number): boolean {
+    return (this.data.flags[i] & FLAG_LINK) !== 0;
+  }
+
+  /** An online-only file or folder: nothing of it is on this PC. */
+  cloud(i: number): boolean {
+    return (this.data.flags[i] & FLAG_CLOUD) !== 0;
   }
 
   /** Direct children, largest first. A view into the tree: do not modify it. */
@@ -244,7 +298,7 @@ export class ScanTree {
     return chain.reverse();
   }
 
-  /** Starts with the scanned folder's name; the browser never reveals the full path. */
+  /** Starts with the scanned folder's name (the full path for helper scans; the browser never reveals it). */
   path(i: number, sep = PATH_SEP): string {
     return this.ancestors(i)
       .map((j) => this.data.names[j])

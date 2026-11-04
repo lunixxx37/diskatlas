@@ -23,3 +23,35 @@ jobs:
       - run: npm test
       # Type-checks with tsc, then builds the static site into dist/.
       - run: npm run build
+
+  helper:
+    name: helper (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # The helper is a Windows program; the Linux run keeps the portable parts honest.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: helper
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          # Newest patch release, so the shipped exe has current net/http fixes.
+          go-version: '1.27.x'
+          cache-dependency-path: helper/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+      - name: Build DiskAtlas-Helper.exe
+        if: runner.os == 'Windows'
+        run: go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=0.1.0-ci.${{ github.run_number }}" -o bin/DiskAtlas-Helper.exe .
+      - uses: actions/upload-artifact@v7
+        if: runner.os == 'Windows'
+        with:
+          name: DiskAtlas-Helper
+          path: helper/bin/DiskAtlas-Helper.exe
+          retention-days: 14

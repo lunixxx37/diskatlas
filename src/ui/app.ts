@@ -1,4 +1,5 @@
 import {
+  HelperError,
   demoRootName,
   demoScan,
   dirHandleFromDrop,
@@ -15,6 +16,7 @@ import {
 import { APP_NAME } from './brand';
 import { h, setText } from './dom';
 import { displayName } from './format';
+import { HelperLink, isWindowsDesktop } from './helper-link';
 import { detectLanguage, lang, setLanguage, storeLanguage, storedLanguage, t, type Lang } from './i18n';
 import { brandGlyph, icon } from './icons';
 import { LangSwitch } from './lang-switch';
@@ -25,7 +27,12 @@ import { ThemeManager, ThemeSwitch } from './theme';
 import { toast } from './toast';
 import { tooltip } from './tooltip';
 
-type Source = { kind: 'handle'; handle: FileSystemDirectoryHandle } | { kind: 'files' } | { kind: 'demo' };
+type Source =
+  | { kind: 'handle'; handle: FileSystemDirectoryHandle }
+  | { kind: 'files' }
+  | { kind: 'demo' }
+  /** Read by the DiskAtlas Helper. */
+  | { kind: 'helper'; path: string };
 
 interface View {
   el: HTMLElement;
@@ -49,6 +56,8 @@ interface ShowOptions {
  */
 export class App {
   private readonly theme = new ThemeManager();
+  /** The DiskAtlas Helper, offered on Windows desktops only. */
+  private readonly helper: HelperLink | null = isWindowsDesktop() ? new HelperLink() : null;
   private readonly support: Support;
   private readonly shell: HTMLElement;
   private readonly context: HTMLElement;
@@ -126,6 +135,8 @@ export class App {
   start(): void {
     if (new URLSearchParams(location.search).has('demo')) this.runDemo();
     else this.showStart();
+    // Back to a helper used before, only if that can't bring up a permission prompt.
+    void this.helper?.reconnectSilently();
   }
 
   /** Dev hook: show any tree as a result. */
@@ -199,10 +210,44 @@ export class App {
     if (!source) return;
     if (source.kind === 'handle') void this.scanHandle(source.handle);
     else if (source.kind === 'demo') this.runDemo();
+    else if (source.kind === 'helper') void this.rescanWithHelper(source.path);
     else {
       this.input.value = '';
       this.input.click();
     }
+  };
+
+  /** From the helper section: a scan of `path` that the helper has already started as `id`. */
+  private readonly surveyWithHelper = (path: string, id?: string): void => {
+    const helper = this.helper;
+    if (!helper) return;
+    this.source = { kind: 'helper', path };
+    void this.run(path, (onProgress) => helper.scan(path, id, onProgress));
+  };
+
+  /** "Scan again" for a helper scan: check the helper is still there (it quits when idle), then scan. */
+  private async rescanWithHelper(path: string): Promise<void> {
+    const helper = this.helper;
+    if (!helper) return;
+    const client = await helper.ensureClient();
+    if (client) {
+      this.surveyWithHelper(path);
+    } else {
+      // The start page's helper section shows what is wrong and how to fix it.
+      this.showStart();
+      document.getElementById('helper')?.scrollIntoView({ block: 'start' });
+    }
+  }
+
+  /** From the results' "not read" note: restart the helper as administrator, then scan the same folder again. */
+  private readonly elevateAndRescan = async (): Promise<void> => {
+    const helper = this.helper;
+    const source = this.source;
+    if (!helper || source?.kind !== 'helper') return;
+    const outcome = await helper.elevate();
+    if (outcome === 'elevated') this.surveyWithHelper(source.path);
+    else if (outcome === 'declined') toast(t.helper.declined, 'info', 6000);
+    else toast(helper.client ? t.helper.elevateFailed : t.helper.lost, 'alert', 7000);
   };
 
   private run(name: string, startScan: (onProgress: (p: ScanProgress) => void) => RunningScan): Promise<void> {
@@ -275,14 +320,24 @@ export class App {
   // ---------- views ----------
 
   private showStart(knowOpen = false): void {
-    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen });
+    const helper = this.helper ? { link: this.helper, onSurvey: this.surveyWithHelper } : null;
+    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen, helper });
     this.show('start', view, `${APP_NAME} – ${t.app.titleStart}`, { rerender: () => this.showStart(this.startView?.knowOpen) });
     this.startView = view;
   }
 
   private showResults(tree: ScanTree): void {
     const build = (restore?: ResultsState) => {
-      const view = new ResultsView({ tree, theme: this.theme, onRescan: this.source ? this.rescan : null, onOtherFolder: this.pick, restore });
+      // Offer the administrator restart only for helper scans without it, while the helper is connected.
+      const canElevate = tree.meta.source === 'helper' && tree.meta.helper?.elevated === false && !!this.helper?.client && this.source?.kind === 'helper';
+      const view = new ResultsView({
+        tree,
+        theme: this.theme,
+        onRescan: this.source ? this.rescan : null,
+        onOtherFolder: this.pick,
+        onElevate: canElevate ? this.elevateAndRescan : null,
+        restore,
+      });
       this.show('results', view, `${displayName(tree, tree.root)} · ${formatBytes(tree.size(tree.root))} – ${APP_NAME}`, {
         context: view.context,
         actions: view.actions,
@@ -295,12 +350,26 @@ export class App {
   }
 
   private showError(error: unknown): void {
+    const fromHelper = this.source?.kind === 'helper';
+    let title = t.errors.title;
+    let message = t.errors.message;
+    let detail = errorText(error);
+    if (error instanceof HelperError) {
+      if (error.kind === 'not-running') {
+        this.helper?.lost();
+        [title, message, detail] = [t.errors.helperLostTitle, t.errors.helperLostText, ''];
+      } else if (error.kind === 'denied') {
+        [title, message, detail] = [t.errors.helperDeniedTitle, t.errors.helperDeniedText, ''];
+      } else {
+        [title, message] = [t.errors.helperFailedTitle, t.errors.helperFailedText];
+      }
+    }
     const view = noticeView({
-      title: t.errors.title,
-      message: t.errors.message,
-      detail: errorText(error),
+      title,
+      message,
+      detail,
       primary: this.source ? { label: t.errors.retry, action: this.rescan } : undefined,
-      secondary: { label: t.errors.otherFolder, action: this.pick },
+      secondary: fromHelper ? { label: t.errors.backToStart, action: () => this.showStart() } : { label: t.errors.otherFolder, action: this.pick },
     });
     const relocalizing = this.relocalizing;
     this.show('notice', view, `${t.app.titleError} – ${APP_NAME}`, { rerender: () => this.showError(error) });

@@ -113,6 +113,10 @@
   max-width: 80em;
 }
 
+.summary__elevate {
+  margin-top: 10px;
+}
+
 /* ---------- Notes ---------- */
 
 .banners {

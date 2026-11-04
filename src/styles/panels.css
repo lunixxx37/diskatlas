@@ -233,6 +233,18 @@
   margin-right: 0;
 }
 
+/* Online-only (helper scans): nothing of the file is on this PC. */
+.cell-flag {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-2);
+}
+
+.cell-flag svg {
+  width: 14px;
+  height: 14px;
+}
+
 @container panel (max-width: 640px) {
   .datatable--files .c-folder,
   .datatable--files .c-date {

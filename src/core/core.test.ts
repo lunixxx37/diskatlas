@@ -248,7 +248,17 @@ describe('format & export', () => {
     const german: CsvFormat = {
       separator: ';',
       bom: true,
-      headers: { path: 'Pfad', bytes: 'Größe (Bytes)', size: 'Größe', files: 'Dateien', folders: 'Ordner', ext: 'Endung', modified: 'Zuletzt geändert' },
+      headers: {
+        path: 'Pfad',
+        bytes: 'Größe (Bytes)',
+        size: 'Größe',
+        allocatedBytes: 'Belegt (Bytes)',
+        allocated: 'Belegt',
+        files: 'Dateien',
+        folders: 'Ordner',
+        ext: 'Endung',
+        modified: 'Zuletzt geändert',
+      },
     };
     const text = foldersCsv(tree, 0, german);
     const lines = text.trim().split('\r\n');

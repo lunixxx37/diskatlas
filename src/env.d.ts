@@ -14,3 +14,19 @@ interface Window {
 interface DataTransferItem {
   getAsFileSystemHandle?: () => Promise<FileSystemHandle | null>;
 }
+
+// Local Network Access (Chrome 142 and later): the address space a request is meant to
+// reach. Requests to the DiskAtlas Helper declare 'loopback'.
+interface RequestInit {
+  targetAddressSpace?: 'loopback' | 'local' | 'public';
+}
+
+// User-Agent Client Hints (Chromium): used to offer the helper only on Windows desktops.
+interface NavigatorUAData {
+  readonly platform: string;
+  readonly mobile: boolean;
+}
+
+interface Navigator {
+  readonly userAgentData?: NavigatorUAData;
+}

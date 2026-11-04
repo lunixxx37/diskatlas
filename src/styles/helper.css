@@ -1,0 +1,375 @@
+/* The start page's DiskAtlas Helper section: whole drives and system folders (Windows). */
+
+.helper {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 20px clamp(28px, 4vw, 60px);
+  align-items: start;
+  margin-top: clamp(40px, 6vw, 72px);
+  padding-top: clamp(22px, 3vw, 32px);
+  border-top: 1px solid var(--line-strong);
+}
+
+.helper + .trust {
+  margin-top: clamp(32px, 5vw, 56px);
+}
+
+.helper__title {
+  margin: 12px 0 10px;
+  font-size: clamp(22px, 2.3vw, 28px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.helper__lede {
+  max-width: 34em;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.helper__card {
+  min-width: 0;
+  padding: 16px 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.helper__status {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.helper__status:focus {
+  outline: none;
+}
+
+.helper__status:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.helper__status > svg,
+.helper__status > .spinner,
+.helper__status > .helper__dot {
+  flex: none;
+  margin-top: 2px;
+}
+
+.helper__status > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--ink-2);
+}
+
+.helper__status[data-tone="warn"] > svg {
+  color: var(--warn);
+}
+
+.helper__dot {
+  width: 9px;
+  height: 9px;
+  margin: 6px 4px 0;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.helper__text {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.helper__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-top: 14px;
+}
+
+.helper__actions:first-child {
+  margin-top: 0;
+}
+
+.helper__fine {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.helper__fine > svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+
+.helper__fine strong {
+  color: var(--ink-2);
+  font-weight: 620;
+}
+
+.helper__steps {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--ink-2);
+  font-size: 14px;
+  counter-reset: step;
+}
+
+.helper__steps li {
+  position: relative;
+  padding-left: 28px;
+  counter-increment: step;
+}
+
+.helper__steps li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--ink-2);
+  font: 500 11px/1 var(--font-mono);
+}
+
+.helper__steps strong {
+  color: var(--ink);
+  font-weight: 620;
+}
+
+/* Connected: status and tools, the drives, any folder. */
+
+.helper__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+}
+
+.helper__tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.helper__drives {
+  margin-top: 16px;
+}
+
+.helper__drives > .label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.drives {
+  display: grid;
+}
+
+.drive {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1.15fr) auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.drive__icon {
+  width: 20px;
+  height: 20px;
+  color: var(--ink-2);
+}
+
+.drive__main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.drive__name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 14.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drive__name strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.drive__name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drive__meta {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drive__usage {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.drive__bar {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--bar-track);
+}
+
+.drive__fill {
+  display: block;
+  height: 100%;
+  background: var(--bar);
+}
+
+.drive__bar[data-full="true"] .drive__fill {
+  background: var(--warn);
+}
+
+.drive__numbers {
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drive[data-ready="false"] .drive__name,
+.drive[data-ready="false"] .drive__icon {
+  color: var(--muted);
+}
+
+.helper__path {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.helper__path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.helper__path .helper__fine {
+  margin-top: 0;
+}
+
+.text-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--control-line);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+
+.text-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.text-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.text-input[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+
+.helper__error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.helper__error svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+/* A quiet progress ring for short waits. */
+.spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spinner {
+    animation: spin 800ms linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .helper {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .helper__card {
+    padding: 14px 14px 16px;
+  }
+  .drive {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+  }
+  .drive__usage,
+  .drive > .drive__numbers {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+  .helper__tools {
+    margin-left: 0;
+  }
+}

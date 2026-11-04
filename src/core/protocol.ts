@@ -1,4 +1,4 @@
-import type { ScanData } from './tree';
+import type { ScanData, ScanMeta } from './tree';
 
 export interface ScanProgress {
   files: number;
@@ -11,7 +11,11 @@ export interface ScanProgress {
   elapsedMs: number;
 }
 
-export type WorkerRequest = { type: 'scan'; handle: FileSystemDirectoryHandle } | { type: 'cancel' };
+export type WorkerRequest =
+  | { type: 'scan'; handle: FileSystemDirectoryHandle }
+  | { type: 'cancel' }
+  /** A helper result (moved, not copied) to check and turn into ScanData; the root name comes from the buffer. */
+  | { type: 'decode'; buffer: ArrayBuffer; meta: ScanMeta };
 
 export type WorkerResponse =
   | { type: 'progress'; progress: ScanProgress }

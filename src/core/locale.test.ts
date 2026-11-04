@@ -60,7 +60,17 @@ describe('English CSV', () => {
   const english: CsvFormat = {
     separator: ',',
     bom: true,
-    headers: { path: 'Path', bytes: 'Size (bytes)', size: 'Size', files: 'Files', folders: 'Folders', ext: 'Extension', modified: 'Last modified' },
+    headers: {
+      path: 'Path',
+      bytes: 'Size (bytes)',
+      size: 'Size',
+      allocatedBytes: 'Size on disk (bytes)',
+      allocated: 'Size on disk',
+      files: 'Files',
+      folders: 'Folders',
+      ext: 'Extension',
+      modified: 'Last modified',
+    },
   };
   const day = Date.UTC(2026, 10, 3, 12);
 

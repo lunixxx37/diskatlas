@@ -56,6 +56,7 @@
 }
 
 .ftree__cols .tc--size,
+.ftree__cols .tc--alloc,
 .ftree__cols .tc--files,
 .ftree__cols .tc--date {
   text-align: right;
@@ -151,12 +152,14 @@
 }
 
 .tr .tc--size,
+.tr .tc--alloc,
 .tr .tc--files,
 .tr .tc--date {
   font-size: 12.5px;
   text-align: right;
 }
 
+.tr .tc--alloc,
 .tr .tc--files,
 .tr .tc--date {
   color: var(--ink-2);
@@ -253,14 +256,25 @@
   height: 13px;
 }
 
-.tr[data-flag="locked"] .tr__flag,
-.tr[data-flag="deep"] .tr__flag {
+.tr:is([data-flag="locked"], [data-flag="deep"], [data-flag="link"], [data-flag="cloud"]) .tr__flag {
   display: inline-flex;
 }
 
-.tr[data-flag="locked"] .tr__flag-deep,
-.tr[data-flag="deep"] .tr__flag-locked {
+/* One marker per row: the one its flag names. Links and online-only files are notes, not warnings. */
+.tr__flag svg {
   display: none;
+}
+
+.tr[data-flag="locked"] .tr__flag-locked,
+.tr[data-flag="deep"] .tr__flag-deep,
+.tr[data-flag="link"] .tr__flag-link,
+.tr[data-flag="cloud"] .tr__flag-cloud {
+  display: block;
+}
+
+.tr:is([data-flag="link"], [data-flag="cloud"]) .tr__flag,
+.selbar__flag:is([data-flag="link"], [data-flag="cloud"]) {
+  color: var(--ink-2);
 }
 
 .tr__copy {
@@ -381,6 +395,33 @@
 }
 
 /* Columns that fit (set by folder-tree.ts from the pane width and the deepest visible row). */
+.tc--alloc {
+  display: none;
+}
+
+/* Helper scans add "On disk" after "Size"; it gives way after "Modified" and "Files". */
+.ftree[data-alloc] .tc--alloc {
+  display: block;
+}
+
+.ftree[data-alloc][data-cols="6"] :is(.ftree__cols, .tr) {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-alloc) var(--c-share) var(--c-files) var(--c-date);
+}
+
+.ftree[data-alloc][data-cols="5"] :is(.ftree__cols, .tr) {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-alloc) var(--c-share) var(--c-files);
+}
+
+.ftree[data-alloc][data-cols="4"] :is(.ftree__cols, .tr) {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-alloc) var(--c-share);
+}
+
+.ftree[data-alloc][data-cols="5"] .tc--date,
+.ftree[data-alloc][data-cols="4"] :is(.tc--date, .tc--files),
+.ftree[data-alloc]:is([data-cols="3"], [data-cols="2"]) .tc--alloc {
+  display: none;
+}
+
 .ftree[data-cols="4"] .ftree__cols,
 .ftree[data-cols="4"] .tr {
   grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-share) var(--c-files);

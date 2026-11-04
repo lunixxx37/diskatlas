@@ -37,6 +37,8 @@
   --accent-wash-strong: rgb(194 69 26 / 0.16);
 
   --warn: #8a5300;
+  /* Connected, ready: the helper status dot. */
+  --ok: #2c7a4b;
   --warn-wash: rgb(176 112 20 / 0.1);
   --warn-line: rgb(138 83 0 / 0.35);
 
@@ -106,6 +108,7 @@
     --accent-wash-strong: rgb(244 122 69 / 0.2);
 
     --warn: #e0a64a;
+    --ok: #5cbf86;
     --warn-wash: rgb(224 166 74 / 0.09);
     --warn-line: rgb(224 166 74 / 0.32);
 
@@ -166,6 +169,7 @@
   --accent-wash-strong: rgb(244 122 69 / 0.2);
 
   --warn: #e0a64a;
+  --ok: #5cbf86;
   --warn-wash: rgb(224 166 74 / 0.09);
   --warn-line: rgb(224 166 74 / 0.32);
 

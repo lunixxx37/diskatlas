@@ -70,6 +70,8 @@ export class TopFilesPanel {
             { class: 'cell-name' },
             h('span', { class: 'swatch', style: { '--cat': categoryVar(tree.categoryIndex(i)) } }),
             h('button', { class: 'cell-name__button', type: 'button', title: t.top.select(name), text: name }),
+            // Online-only files (helper scans): big, yet nothing of them is on this PC.
+            tree.cloud(i) ? h('span', { class: 'cell-flag', title: t.flags.cloud }, icon('cloud'), h('span', { class: 'sr-only', text: t.flags.cloud })) : null,
           ),
           h('div', { class: 'cell-sub mono', text: where || t.top.rightHere }),
         ),

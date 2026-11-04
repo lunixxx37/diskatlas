@@ -9,7 +9,8 @@ function contentSecurityPolicy(): Plugin {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    // The DiskAtlas Helper on its three loopback ports (docs/helper-protocol.md).
+    "connect-src 'self' http://127.0.0.1:41417 http://127.0.0.1:41418 http://127.0.0.1:41419",
     "worker-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

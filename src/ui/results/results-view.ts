@@ -30,6 +30,8 @@ export interface ResultsViewOptions {
   /** null: this tree cannot be scanned again (handed in from outside). */
   onRescan: (() => void) | null;
   onOtherFolder: () => void;
+  /** A helper scan without administrator rights, helper connected: restart it elevated and scan again. */
+  onElevate?: (() => Promise<void>) | null;
   /** State of an earlier view of the same tree (the language changed): carry on from there. */
   restore?: ResultsState;
 }
@@ -390,6 +392,7 @@ export class ResultsView {
 
     const cells = [
       cell(t.results.totalSize, formatBytes(tree.size(tree.root)), 'summary__cell--hero'),
+      tree.hasAllocated ? cell(t.results.onDisk, formatBytes(tree.allocated(tree.root))) : null,
       cell(t.results.files, formatCount(tree.fileCount(tree.root))),
       cell(t.results.folders, formatCount(tree.dirCount(tree.root))),
       cell(t.results.duration, formatDuration(tree.meta.durationMs)),
@@ -416,7 +419,7 @@ export class ResultsView {
         h('span', { class: 'num summary__short', text: short.join(', ') }),
         icon('chevronDown', 'summary__caret'),
       );
-      explain = h('div', { class: 'summary__explain', id, hidden: !explainOpen }, h('p', null, t.results.explain(deep > 0)));
+      explain = h('div', { class: 'summary__explain', id, hidden: !explainOpen }, ...this.explainContent(deep > 0));
       this.explainToggle = toggle;
       toggle.addEventListener('click', () => {
         const open = toggle.getAttribute('aria-expanded') !== 'true';
@@ -432,6 +435,30 @@ export class ResultsView {
       h('div', { class: 'summary__cells' }, ...cells, when ? h('p', { class: 'summary__when', text: when }) : null),
       explain,
     );
+  }
+
+  /** Why entries were not read; for a helper scan without administrator rights, how to read more. */
+  private explainContent(deep: boolean): HTMLElement[] {
+    const { meta } = this.tree;
+    if (meta.source !== 'helper') return [h('p', null, t.results.explain(deep))];
+    const notElevated = meta.helper?.elevated === false;
+    const text = h('p', null, t.results.explainHelper(deep), notElevated ? ` ${t.results.elevateHint}` : '');
+    const onElevate = this.options.onElevate;
+    if (!notElevated || !onElevate) return [text];
+    const label = h('span', { text: t.results.elevateRescan });
+    const button = h('button', { class: 'btn btn--secondary btn--sm summary__elevate', type: 'button' }, icon('shield'), label);
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      setText(label, t.results.elevateWaiting);
+      try {
+        await onElevate();
+      } finally {
+        // Still here when Windows' prompt was declined.
+        button.disabled = false;
+        setText(label, t.results.elevateRescan);
+      }
+    });
+    return [text, button];
   }
 
   private buildBanners(): HTMLElement[] {

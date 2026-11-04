@@ -11,6 +11,9 @@ export interface CsvFormat {
     path: string;
     bytes: string;
     size: string;
+    /** Size on disk, raw and formatted; only scans that know it (helper scans) get these columns. */
+    allocatedBytes: string;
+    allocated: string;
     files: string;
     folders: string;
     ext: string;
@@ -33,30 +36,35 @@ function isoDate(ms: number): string {
   return ms > 0 ? new Date(ms).toISOString().slice(0, 10) : '';
 }
 
+/** Size and, when the scan knows it, size on disk: raw bytes and formatted. */
+function sizeCells(tree: ScanTree, i: number): Array<string | number> {
+  const cells: Array<string | number> = [tree.size(i), formatBytes(tree.size(i))];
+  if (tree.hasAllocated) cells.push(tree.allocated(i), formatBytes(tree.allocated(i)));
+  return cells;
+}
+
+function sizeHeaders(tree: ScanTree, format: CsvFormat): string[] {
+  const h = format.headers;
+  return tree.hasAllocated ? [h.bytes, h.size, h.allocatedBytes, h.allocated] : [h.bytes, h.size];
+}
+
 /** Every folder from `root` down, largest first within each folder. */
 export function foldersCsv(tree: ScanTree, root: number, format: CsvFormat): string {
   const rows: Array<Array<string | number>> = [];
-  const add = (i: number) =>
-    rows.push([tree.path(i), tree.size(i), formatBytes(tree.size(i)), tree.fileCount(i), tree.dirCount(i), isoDate(tree.mtime(i))]);
+  const add = (i: number) => rows.push([tree.path(i), ...sizeCells(tree, i), tree.fileCount(i), tree.dirCount(i), isoDate(tree.mtime(i))]);
   const visit = (i: number) => {
     add(i);
     for (const c of tree.children(i)) if (tree.isDir(c)) visit(c);
   };
   visit(root);
   const h = format.headers;
-  return csv(format, [h.path, h.bytes, h.size, h.files, h.folders, h.modified], rows);
+  return csv(format, [h.path, ...sizeHeaders(tree, format), h.files, h.folders, h.modified], rows);
 }
 
 export function filesCsv(tree: ScanTree, files: readonly number[], format: CsvFormat): string {
-  const rows = files.map((i) => [
-    tree.path(i),
-    tree.size(i),
-    formatBytes(tree.size(i)),
-    tree.ext(i),
-    isoDate(tree.mtime(i)),
-  ]);
+  const rows = files.map((i) => [tree.path(i), ...sizeCells(tree, i), tree.ext(i), isoDate(tree.mtime(i))]);
   const h = format.headers;
-  return csv(format, [h.path, h.bytes, h.size, h.ext, h.modified], rows);
+  return csv(format, [h.path, ...sizeHeaders(tree, format), h.ext, h.modified], rows);
 }
 
 /** Lets the browser save `text` as a file. */

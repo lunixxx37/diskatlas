@@ -1,5 +1,5 @@
 import type { ScanProgress, WorkerRequest, WorkerResponse } from './protocol';
-import { ScanTree, TreeBuilder } from './tree';
+import { ScanTree, TreeBuilder, type ScanMeta } from './tree';
 
 export interface RunningScan {
   /** Resolves with the scanned tree. After `cancel()` it resolves with the part read so far (`meta.complete` is false). */
@@ -72,6 +72,29 @@ export function scanDirectory(
   const post = (request: WorkerRequest) => worker.postMessage(request);
   post({ type: 'scan', handle });
   return { result, cancel: () => post({ type: 'cancel' }) };
+}
+
+/**
+ * Turns a helper result into a tree in a background worker. The buffer is moved there
+ * (it is unusable here afterwards); `meta.rootName` is replaced by the result's root name.
+ */
+export function decodeHelperResultInWorker(buffer: ArrayBuffer, meta: ScanMeta): Promise<ScanTree> {
+  const worker = new Worker(new URL('./scan.worker.ts', import.meta.url), { type: 'module' });
+  return new Promise<ScanTree>((resolve, reject) => {
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const message = event.data;
+      if (message.type === 'progress') return;
+      worker.terminate();
+      if (message.type === 'done') resolve(new ScanTree(message.data));
+      else reject(new Error(message.message));
+    };
+    worker.onerror = (event) => {
+      worker.terminate();
+      reject(new Error(event.message || ''));
+    };
+    const request: WorkerRequest = { type: 'decode', buffer, meta };
+    worker.postMessage(request, [buffer]);
+  });
 }
 
 /**

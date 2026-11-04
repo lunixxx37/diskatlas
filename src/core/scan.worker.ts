@@ -1,3 +1,4 @@
+import { decodeHelperResult } from './helper-format';
 import type { WorkerRequest, WorkerResponse } from './protocol';
 import { TreeBuilder, transferablesOf } from './tree';
 import { walk } from './walk';
@@ -14,6 +15,17 @@ onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   if (request.type === 'cancel') {
     cancelled = true;
+    return;
+  }
+  if (request.type === 'decode') {
+    // A helper result: check it, add up the folders and sort, off the page's thread.
+    try {
+      const builder = decodeHelperResult(request.buffer);
+      const data = builder.finish({ ...request.meta, rootName: builder.names[0] });
+      send({ type: 'done', data }, transferablesOf(data));
+    } catch (error) {
+      send({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    }
     return;
   }
 

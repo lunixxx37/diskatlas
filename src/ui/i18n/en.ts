@@ -1,4 +1,4 @@
-import type { AgeBucketId, CategoryId, CsvFormat } from '../../core';
+import type { AgeBucketId, CategoryId, CsvFormat, HelperDriveType } from '../../core';
 import type { Plural, Rich } from './types';
 
 // The English catalog is the source: its shape is the `Messages` type, so a key that is
@@ -31,6 +31,13 @@ export const en = {
     message: "The folder couldn't be read. Try again or choose another folder.",
     retry: 'Try again',
     otherFolder: 'Choose another folder',
+    helperLostTitle: 'The connection to the helper was lost.',
+    helperLostText: 'The helper may have quit. Start it again on the start page and survey once more.',
+    helperDeniedTitle: 'The browser blocks the connection to the helper.',
+    helperDeniedText: 'Allow it again on the start page, under “Whole drives and system folders”.',
+    helperFailedTitle: "The helper couldn't finish the survey.",
+    helperFailedText: 'Try again, or survey another drive or folder.',
+    backToStart: 'Back to the start page',
   },
 
   drop: {
@@ -98,8 +105,83 @@ export const en = {
         " themselves don't work either, but you can choose the folders inside them.",
       ],
       ['Other drives such as ', { b: 'D:' }, ' can usually be surveyed in full.'],
-      ['A small helper app for complete system drives is planned.'],
+      [
+        'What the browser blocks, the ',
+        { b: 'DiskAtlas Helper' },
+        ' for Windows can read: whole drives such as C:, system folders, and the space files take up on disk.',
+      ],
     ] satisfies Rich[],
+  },
+
+  /** The start page's section for the DiskAtlas Helper (Windows desktops only). */
+  helper: {
+    eyebrow: 'DiskAtlas Helper for Windows',
+    title: 'Whole drives and system folders',
+    lede: "The browser can't open C:\\ or system folders. The DiskAtlas Helper can: a small program without a window that only reads, never changes anything, and quits by itself when it isn't needed.",
+    connect: 'Connect helper',
+    permissionNote: 'Your browser will then ask whether this site may access apps on your device (“Loopback network”). Allow it, so the page can reach the helper.',
+    quitNote: 'The helper has quit.',
+    connecting: 'Connecting to the helper …',
+    notFound: "The helper isn't running.",
+    notFoundText: "Start it, or download it first if it isn't on this PC yet.",
+    lost: 'The connection to the helper was lost. It quits by itself after a while without use; start it again.',
+    stillNotFound: 'Still no answer. If your browser asked whether to open the DiskAtlas Helper, allow it, or start DiskAtlas-Helper.exe yourself.',
+    start: 'Start helper',
+    download: 'Download for Windows',
+    retry: 'Try again',
+    waiting: (seconds: string) => `Waiting for the helper … ${seconds} s`,
+    firstRun: 'Run the downloaded file once. It then keeps running in the background, without a window.',
+    smartScreen: [
+      "Windows SmartScreen may warn you, because the helper isn't signed yet: choose ",
+      { b: 'More info' },
+      ', then ',
+      { b: 'Run anyway' },
+      '.',
+    ] satisfies Rich,
+    denied: 'The browser blocks the connection to the helper.',
+    deniedSteps: [
+      ['Click the icon to the left of the address in the address bar.'],
+      ['Set ', { b: 'Loopback network' }, ' (earlier ', { b: 'Local network' }, ') to ', { b: 'Allow' }, '.'],
+      ['Reload the page and connect again.'],
+    ] satisfies Rich[],
+    wrongServer: "Another program answers on the helper's ports (41417 to 41419). Quit it, or start the helper so that it finds a free port.",
+    connected: (version: string) => (version ? `Connected to the helper ${version}` : 'Connected to the helper'),
+    admin: 'running as administrator',
+    notAdmin: 'running without administrator rights',
+    elevate: 'Restart as administrator',
+    elevateNote: "Windows asks for permission first. As administrator the helper can also read other users' folders.",
+    elevating: 'Waiting for Windows: confirm the prompt to restart the helper as administrator …',
+    declined: 'The helper keeps running without administrator rights.',
+    elevateFailed: "The helper didn't come back as administrator.",
+    quit: 'Quit helper',
+    drives: 'Drives',
+    loadingDrives: 'Reading the drives …',
+    drivesFailed: "The list of drives couldn't be read.",
+    noDrives: 'The helper found no drives.',
+    survey: 'Survey',
+    surveyDrive: (drive: string) => `Survey ${drive}`,
+    notReady: 'Not ready',
+    free: (free: string, total: string) => `${free} free of ${total}`,
+    used: (pct: string) => `${pct} used`,
+    driveType: {
+      fixed: 'Local disk',
+      removable: 'Removable disk',
+      network: 'Network drive',
+      cdrom: 'CD/DVD drive',
+      ramdisk: 'RAM disk',
+      unknown: 'Drive',
+    } satisfies Record<HelperDriveType, string>,
+    pathLabel: 'Any folder',
+    pathPlaceholder: 'C:\\Users\\Ann\\Videos',
+    pathHint: 'A full path, such as C:\\Users or D:\\Games.',
+    pathError: {
+      empty: 'Enter the path of a folder.',
+      relative: 'Enter a full path that starts with a drive letter, such as C:\\Users.',
+      not_found: "This folder doesn't exist.",
+      not_a_directory: "That's a file, not a folder.",
+      bad_request: "The helper can't use this path.",
+      other: "The helper couldn't start the survey.",
+    },
   },
 
   /** The start page's example map sheet (an invented drive). */
@@ -159,6 +241,7 @@ export const en = {
     folders: 'Folders',
     duration: 'Scan time',
     notRead: 'Not read',
+    onDisk: 'On disk',
     unreadable: { one: '# entry unreadable', other: '# entries unreadable' } satisfies Plural,
     unreadableShort: { one: '# unreadable', other: '# unreadable' } satisfies Plural,
     tooDeep: { one: '# folder too deep', other: '# folders too deep' } satisfies Plural,
@@ -166,6 +249,12 @@ export const en = {
     explain: (deep: boolean) =>
       "The browser wasn't allowed to open these entries, for example protected system folders or files that another program is using. " +
       `Their size is missing from the totals. In the folder tree they are marked with a lock${deep ? ', folders nested too deeply with a stack.' : '.'}`,
+    explainHelper: (deep: boolean) =>
+      "Windows didn't let the helper open these entries, for example other users' folders or protected system folders. " +
+      `Their size is missing from the totals. In the folder tree they are marked with a lock${deep ? ', folders nested too deeply with a stack.' : '.'}`,
+    elevateHint: 'As administrator, the helper can read more of them.',
+    elevateRescan: 'Restart as administrator and survey again',
+    elevateWaiting: 'Waiting for Windows …',
     surveyedAt: (when: string) => `Surveyed ${when}`,
     incompleteTitle: 'Incomplete. ',
     incompleteText: 'The survey was cancelled. Anything that had not been read by then is missing from the numbers.',
@@ -209,6 +298,8 @@ export const en = {
       path: 'Path',
       bytes: 'Size (bytes)',
       size: 'Size',
+      allocatedBytes: 'Size on disk (bytes)',
+      allocated: 'Size on disk',
       files: 'Files',
       folders: 'Folders',
       ext: 'Extension',
@@ -224,12 +315,15 @@ export const en = {
     selected: 'Selected: ',
     colName: 'Name',
     colSize: 'Size',
+    colOnDisk: 'On disk',
+    colOnDiskTitle: 'Size on disk',
     colShare: 'Share',
     colFiles: 'Files',
     colModified: 'Modified',
     colModifiedTitle: 'Last modified',
     folder: 'folder',
     file: 'file',
+    onDisk: (size: string) => `${size} on disk`,
     ofParent: (pct: string) => `${pct} of the parent folder`,
     modifiedOn: (date: string) => `last modified ${date}`,
   },
@@ -238,6 +332,11 @@ export const en = {
     unreadableFolder: "No access: the browser wasn't allowed to read this folder",
     unreadableFile: "No access: the browser wasn't allowed to read this file",
     tooDeep: 'Nested too deeply, not opened',
+    link: 'Link, not followed',
+    cloud: 'Online only, not on this PC',
+    /** Helper scans: Windows refused the helper, not the browser. */
+    helperUnreadableFolder: "No access: Windows didn't let the helper read this folder",
+    helperUnreadableFile: "No access: Windows didn't let the helper read this file",
   },
 
   map: {

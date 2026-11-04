@@ -12,6 +12,7 @@ import { displayName, displayPath } from '../format';
 import { plural, t } from '../i18n';
 import { tooltip, tooltipBody } from '../tooltip';
 import { categoryVar, readMapColors, type MapColors } from './colors';
+import { flagText } from './folder-tree';
 
 export interface TreemapViewOptions {
   tree: ScanTree;
@@ -254,8 +255,9 @@ export class TreemapView {
 
   private emptyMessage(folder: number, total: number): string | null {
     const { tree } = this;
-    if (tree.unreadable(folder) && tree.childCount(folder) === 0) return t.flags.unreadableFolder;
+    if (tree.unreadable(folder) && tree.childCount(folder) === 0) return flagText(tree, folder);
     if (tree.tooDeep(folder)) return t.flags.tooDeep;
+    if (tree.link(folder)) return t.flags.link;
     if (tree.childCount(folder) === 0) return t.map.empty;
     if (total <= 0) return t.map.zero;
     return null;
@@ -515,9 +517,11 @@ export class TreemapView {
     const cat = tree.categoryIndex(i);
     const size = tree.size(i);
     const category = t.categories[CATEGORIES[cat].id];
-    const meta = tree.isDir(i)
+    const flag = tree.link(i) || tree.cloud(i) ? flagText(tree, i) : null;
+    const base = tree.isDir(i)
       ? t.map.folderMeta(category, plural(tree.fileCount(i), t.files))
       : t.map.fileMeta(category, formatDate(tree.mtime(i)));
+    const meta = flag ? `${base} · ${flag}` : base;
     return tooltipBody({
       value: formatBytes(size),
       share: t.map.shareOf(formatPercent(total > 0 ? size / total : 0), where),

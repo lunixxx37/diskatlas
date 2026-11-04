@@ -1,7 +1,7 @@
 // Everything the user interface needs from the scanning and analysis code.
 
 export { CATEGORIES, categoryOfExt, extOf, type Category, type CategoryId } from './categories';
-export { ScanTree, type ScanMeta, type ScanSource } from './tree';
+export { ScanTree, type HelperScanInfo, type ScanMeta, type ScanSource } from './tree';
 export type { ScanProgress } from './protocol';
 export {
   dirHandleFromDrop,
@@ -37,3 +37,19 @@ export {
   setFormatLocale,
 } from './format';
 export { downloadText, filesCsv, foldersCsv, type CsvFormat } from './export';
+export {
+  HELPER_DOWNLOAD_URL,
+  HELPER_PORTS,
+  HELPER_START_URL,
+  HelperClient,
+  HelperError,
+  findHelper,
+  loopbackPermission,
+  scanWithHelper,
+  type HelperDrive,
+  type HelperDriveType,
+  type HelperElevation,
+  type HelperFailure,
+  type HelperInfo,
+  type LoopbackPermission,
+} from './helper';

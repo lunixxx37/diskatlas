@@ -3,6 +3,7 @@
 @import "./base.css";
 @import "./layout.css";
 @import "./start.css";
+@import "./helper.css";
 @import "./scan.css";
 @import "./results.css";
 @import "./tree.css";

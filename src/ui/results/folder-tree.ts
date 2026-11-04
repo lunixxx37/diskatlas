@@ -2,7 +2,7 @@ import { formatBytes, formatCount, formatDate, formatPercent, type ScanTree } fr
 import { h, setText, uniqueId } from '../dom';
 import { displayName, displayPath, splitPath } from '../format';
 import { lang, plural, t, type Lang } from '../i18n';
-import { icon } from '../icons';
+import { icon, type IconName } from '../icons';
 import { categoryVar } from './colors';
 import { TreeRows } from './tree-rows';
 
@@ -37,12 +37,33 @@ const INDENT = 12;
  * ("03.11.2026") and up to 12 in English ("Nov 28, 2026", "28 Sept 2026").
  */
 const DATE_WIDTH: Record<Lang, number> = { de: 78, en: 92 };
+/** Width of "On disk" in px (helper scans; keep in sync with --c-alloc in tree.css). */
+const ALLOC_WIDTH = 72;
 
-/** Why an entry has no (complete) size, or null. */
+/** What is special about an entry, for the row's marker. */
+export type EntryFlag = 'locked' | 'deep' | 'link' | 'cloud' | '';
+
+export function entryFlag(tree: ScanTree, i: number): EntryFlag {
+  return tree.unreadable(i) ? 'locked' : tree.tooDeep(i) ? 'deep' : tree.link(i) ? 'link' : tree.cloud(i) ? 'cloud' : '';
+}
+
+export const FLAG_ICONS: Record<Exclude<EntryFlag, ''>, IconName> = { locked: 'lock', deep: 'layers', link: 'link', cloud: 'cloud' };
+
+/** Why an entry has no (complete) size, or what else is special about it; null for ordinary entries. */
 export function flagText(tree: ScanTree, i: number): string | null {
-  if (tree.unreadable(i)) return tree.isDir(i) ? t.flags.unreadableFolder : t.flags.unreadableFile;
-  if (tree.tooDeep(i)) return t.flags.tooDeep;
-  return null;
+  switch (entryFlag(tree, i)) {
+    case 'locked':
+      if (tree.meta.source === 'helper') return tree.isDir(i) ? t.flags.helperUnreadableFolder : t.flags.helperUnreadableFile;
+      return tree.isDir(i) ? t.flags.unreadableFolder : t.flags.unreadableFile;
+    case 'deep':
+      return t.flags.tooDeep;
+    case 'link':
+      return t.flags.link;
+    case 'cloud':
+      return t.flags.cloud;
+    default:
+      return null;
+  }
 }
 
 interface RowView {
@@ -53,6 +74,8 @@ interface RowView {
   name: HTMLElement;
   flag: HTMLElement;
   size: HTMLElement;
+  /** Size on disk; only in helper scans. */
+  alloc: HTMLElement | null;
   share: HTMLElement;
   fill: HTMLElement;
   pct: HTMLElement;
@@ -98,10 +121,12 @@ export class FolderTree {
   private pendingScroll = -1;
   private lastScroll = 0;
   private readonly dateWidth = DATE_WIDTH[lang()];
+  private readonly hasAlloc: boolean;
   private readonly resize: ResizeObserver;
 
   constructor(private readonly options: FolderTreeOptions) {
     this.tree = options.tree;
+    this.hasAlloc = this.tree.hasAllocated;
     const state = options.state;
     this.rows = new TreeRows(this.tree, state?.showFiles ?? true, state?.expanded);
     this.activeEntry = state?.active ?? this.tree.root;
@@ -120,6 +145,7 @@ export class FolderTree {
       { class: 'ftree__cols', 'aria-hidden': 'true' },
       h('span', { class: 'tc tc--name', text: t.tree.colName }),
       h('span', { class: 'tc tc--size', text: t.tree.colSize }),
+      this.hasAlloc ? h('span', { class: 'tc tc--alloc', text: t.tree.colOnDisk, title: t.tree.colOnDiskTitle }) : null,
       h('span', { class: 'tc tc--share', text: t.tree.colShare }),
       h('span', { class: 'tc tc--files', text: t.tree.colFiles }),
       h('span', { class: 'tc tc--date', text: t.tree.colModified, title: t.tree.colModifiedTitle }),
@@ -144,7 +170,7 @@ export class FolderTree {
 
     this.el = h(
       'section',
-      { class: 'ftree', 'aria-label': t.tree.title, style: { '--c-date': `${this.dateWidth}px` } },
+      { class: 'ftree', 'aria-label': t.tree.title, 'data-alloc': this.hasAlloc, style: { '--c-date': `${this.dateWidth}px`, '--c-alloc': `${ALLOC_WIDTH}px` } },
       h(
         'header',
         { class: 'pane__head ftree__head' },
@@ -305,7 +331,8 @@ export class FolderTree {
 
   /**
    * Which columns fit: the name column must keep room for the deepest visible row's indent
-   * plus a readable name. "Modified" goes first, then "Files", then the share bar.
+   * plus a readable name. "Modified" goes first, then "Files", then "On disk" (helper
+   * scans), then the share bar.
    */
   private updateColumns(): void {
     const width = this.treeEl.clientWidth;
@@ -314,11 +341,19 @@ export class FolderTree {
     const room = width - 26; // row padding
     // Indent, then chevron, category mark, icon and their gaps (64 px), then about 20 characters of name.
     const nameNeeds = this.rows.maxDepth * INDENT + 64 + 160;
-    const layouts: Array<[cols: string, used: number]> = [
-      ['5', 72 + 92 + 60 + this.dateWidth + 4 * gap],
-      ['4', 72 + 92 + 60 + 3 * gap],
-      ['3', 72 + 92 + 2 * gap],
-    ];
+    const a = ALLOC_WIDTH + gap;
+    const layouts: Array<[cols: string, used: number]> = this.hasAlloc
+      ? [
+          ['6', 72 + a + 92 + 60 + this.dateWidth + 4 * gap],
+          ['5', 72 + a + 92 + 60 + 3 * gap],
+          ['4', 72 + a + 92 + 2 * gap],
+          ['3', 72 + 92 + 2 * gap],
+        ]
+      : [
+          ['5', 72 + 92 + 60 + this.dateWidth + 4 * gap],
+          ['4', 72 + 92 + 60 + 3 * gap],
+          ['3', 72 + 92 + 2 * gap],
+        ];
     const fit = layouts.find(([, used]) => room - used >= nameNeeds);
     const cols = fit ? fit[0] : '2';
     if (this.el.dataset.cols !== cols) this.el.dataset.cols = cols;
@@ -374,11 +409,16 @@ export class FolderTree {
   private makeRow(): RowView {
     const cat = h('span', { class: 'tr__cat' });
     const name = h('span', { class: 'tr__name' });
-    const flag = h('span', { class: 'tr__flag' }, icon('lock', 'tr__flag-locked'), icon('layers', 'tr__flag-deep'));
+    const flag = h(
+      'span',
+      { class: 'tr__flag' },
+      ...Object.entries(FLAG_ICONS).map(([kind, name]) => icon(name, `tr__flag-${kind}`)),
+    );
     const fill = h('span', { class: 'share__fill' });
     const share = h('span', { class: 'share' }, fill);
     const pct = h('span', { class: 'share__pct num' });
     const size = h('div', { class: 'tc tc--size num' });
+    const alloc = this.hasAlloc ? h('div', { class: 'tc tc--alloc num' }) : null;
     const files = h('div', { class: 'tc tc--files num' });
     const date = h('div', { class: 'tc tc--date num' });
     const el = h(
@@ -396,12 +436,13 @@ export class FolderTree {
         h('span', { class: 'tr__copy', title: t.tree.copyPath, 'aria-hidden': 'true' }, icon('copy')),
       ),
       size,
+      alloc,
       h('div', { class: 'tc tc--share' }, share, pct),
       files,
       date,
     );
     this.layer.append(el);
-    return { el, row: -1, entry: -1, cat, name, flag, size, share, fill, pct, files, date };
+    return { el, row: -1, entry: -1, cat, name, flag, size, alloc, share, fill, pct, files, date };
   }
 
   private fill(v: RowView, row: number): void {
@@ -425,12 +466,19 @@ export class FolderTree {
     setText(v.name, name);
     v.name.title = name;
     const flag = flagText(tree, entry);
-    el.dataset.flag = tree.unreadable(entry) ? 'locked' : tree.tooDeep(entry) ? 'deep' : '';
+    el.dataset.flag = entryFlag(tree, entry);
     v.flag.title = flag ?? '';
 
     const size = tree.size(entry);
-    const sizeText = tree.unreadable(entry) && size === 0 ? '–' : formatBytes(size);
+    // Nothing to measure: folders that could not be read, links that were not followed.
+    const sizeText = (tree.unreadable(entry) || tree.link(entry)) && size === 0 ? '–' : formatBytes(size);
     setText(v.size, sizeText);
+    let allocText = '';
+    if (v.alloc) {
+      const alloc = tree.allocated(entry);
+      allocText = (tree.unreadable(entry) || tree.link(entry)) && alloc === 0 ? '–' : formatBytes(alloc);
+      setText(v.alloc, allocText);
+    }
     const parent = tree.parent(entry);
     let shareText = '';
     if (parent >= 0) {
@@ -447,6 +495,7 @@ export class FolderTree {
     setText(v.date, formatDate(tree.mtime(entry)));
 
     const label = [name, dir ? t.tree.folder : t.tree.file, sizeText];
+    if (allocText && allocText !== '–') label.push(t.tree.onDisk(allocText));
     if (shareText) label.push(t.tree.ofParent(shareText));
     if (dir) label.push(plural(tree.fileCount(entry), t.files));
     if (tree.mtime(entry) > 0) label.push(t.tree.modifiedOn(formatDate(tree.mtime(entry))));
@@ -638,6 +687,8 @@ export class FolderTree {
     this.selIcon.style.setProperty('--cat', categoryVar(this.tree.categoryIndex(entry)));
     const flag = flagText(this.tree, entry);
     this.selFlag.hidden = !flag;
-    this.selFlag.replaceChildren(...(flag ? [icon(this.tree.unreadable(entry) ? 'lock' : 'layers'), flag] : []));
+    const kind = entryFlag(this.tree, entry);
+    this.selFlag.dataset.flag = kind;
+    this.selFlag.replaceChildren(...(flag && kind ? [icon(FLAG_ICONS[kind]), flag] : []));
   }
 }
