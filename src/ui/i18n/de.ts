@@ -129,11 +129,12 @@ export const de: Messages = {
     notFound: 'Der Helper läuft nicht.',
     notFoundText: 'Starte ihn, oder lade ihn zuerst herunter, falls er noch nicht auf diesem PC ist.',
     lost: 'Die Verbindung zum Helper ist abgerissen. Er beendet sich nach einer Weile ohne Nutzung selbst; starte ihn erneut.',
-    stillNotFound: 'Noch keine Antwort. Falls dein Browser gefragt hat, ob der DiskAtlas Helper geöffnet werden soll, erlaube es, oder starte DiskAtlas-Helper.exe selbst.',
+    stillNotFound: 'Noch keine Antwort. Die Frage deines Browsers nicht gesehen? Starte DiskAtlas-Helper.exe selbst per Doppelklick. Diese Seite verbindet sich, sobald er läuft.',
     start: 'Helper starten',
     download: 'Für Windows herunterladen',
     retry: 'Erneut versuchen',
-    waiting: (seconds) => `Warte auf den Helper … ${seconds} s`,
+    waiting: (seconds) =>
+      `Warte auf den Helper … ${seconds} s. Dein Browser fragt oben im Fenster, ob er DiskAtlas-Helper.exe öffnen darf. Wähle „Öffnen“, die Abfrage übersieht man leicht.`,
     firstRun: 'Starte die heruntergeladene Datei einmal. Sie läuft dann ohne Fenster im Hintergrund.',
     smartScreen: [
       'Windows SmartScreen warnt eventuell, weil der Helper noch nicht signiert ist: Wähle ',

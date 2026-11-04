@@ -37,7 +37,11 @@ export type HelperNote = 'quit' | 'lost' | 'still-not-found' | 'declined' | 'ele
 export type PathProblem = 'empty' | 'relative' | 'not_found' | 'not_a_directory' | 'bad_request' | 'other';
 
 const REMEMBER_KEY = 'diskatlas:helper';
-const START_WAIT_MS = 20_000;
+/** Long enough to notice and answer the browser's "open this app?" prompt. */
+const START_WAIT_MS = 60_000;
+/** After that, keep looking now and then, so a helper started by hand is still found. */
+const LATE_LOOK_MS = 5 * 60_000;
+const LATE_LOOK_EVERY_MS = 3000;
 const ELEVATE_WAIT_MS = 20_000;
 /** The first request may wait on the browser's permission prompt. */
 const PROMPT_WAIT_MS = 120_000;
@@ -155,6 +159,19 @@ export class HelperLink extends EventTarget {
       if (token !== this.token) return;
     }
     this.set('not-found', 'still-not-found');
+    // Keep looking quietly, so a helper started by double-click still connects on its own.
+    const lateUntil = Date.now() + LATE_LOOK_MS;
+    while (Date.now() < lateUntil) {
+      await sleep(LATE_LOOK_EVERY_MS);
+      if (token !== this.token || this.status !== 'not-found') return;
+      try {
+        const client = await findHelper({ timeoutMs: 800 });
+        if (token === this.token && this.status === 'not-found') await this.adopt(client);
+        return;
+      } catch {
+        // Still not running.
+      }
+    }
   }
 
   /**

@@ -137,11 +137,12 @@ export const en = {
     notFound: "The helper isn't running.",
     notFoundText: "Start it, or download it first if it isn't on this PC yet.",
     lost: 'The connection to the helper was lost. It quits by itself after a while without use; start it again.',
-    stillNotFound: 'Still no answer. If your browser asked whether to open the DiskAtlas Helper, allow it, or start DiskAtlas-Helper.exe yourself.',
+    stillNotFound: "Still no answer. Didn't see your browser's question? Start DiskAtlas-Helper.exe yourself with a double-click; this page connects as soon as it runs.",
     start: 'Start helper',
     download: 'Download for Windows',
     retry: 'Try again',
-    waiting: (seconds: string) => `Waiting for the helper … ${seconds} s`,
+    waiting: (seconds: string) =>
+      `Waiting for the helper … ${seconds} s. Your browser asks at the top of its window whether it may open DiskAtlas-Helper.exe. Choose "Open"; the prompt is easy to miss.`,
     firstRun: 'Run the downloaded file once. It then keeps running in the background, without a window.',
     smartScreen: [
       "Windows SmartScreen may warn you, because the helper isn't signed yet: choose ",
