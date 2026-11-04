@@ -30,11 +30,6 @@ export interface HelperInfo {
   idleTimeoutSeconds: number;
   /** What this helper can do: "scan", and in newer versions "pick", "reveal", "recycle" and "delete". */
   features: string[];
-  /**
-   * This run of the helper set up the diskatlas-helper:// link for the first time (or changed
-   * it). Browsers that were already running can't open the link before they are restarted.
-   */
-  linkChanged: boolean;
 }
 
 /** Optional abilities a helper lists in /v1/info `features`. */
@@ -275,7 +270,6 @@ export function asHelperInfo(value: unknown): HelperInfo | null {
     idleTimeoutSeconds: typeof v.idleTimeoutSeconds === 'number' ? v.idleTimeoutSeconds : 0,
     // A helper without `features` only scans.
     features: Array.isArray(v.features) ? v.features.filter((f): f is string => typeof f === 'string') : ['scan'],
-    linkChanged: v.linkChanged === true,
   };
 }
 

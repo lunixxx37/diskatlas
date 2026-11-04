@@ -187,8 +187,6 @@ export class HelperPanel {
     if (!link.elevated && !elevating) notes.push(fine('shield', t.helper.elevateNote));
     // As administrator it can list protected folders for any program of this user: quit it when done.
     if (link.elevated && !elevating) notes.push(fine('power', t.helper.quitElevated));
-    // A browser that was already running when the link was set up doesn't know it yet.
-    if (link.client?.info.linkChanged && !elevating) notes.push(fine('info', t.helper.restartBrowser));
     return [head, ...notes, this.driveList(elevating), this.pathForm(elevating)];
   }
 

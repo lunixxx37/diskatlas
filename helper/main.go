@@ -139,14 +139,12 @@ func serve(opts options, logger *log.Logger) int {
 	}
 	ln = requireSameUser(ln, owners, self, logger)
 
-	linkChanged := false
 	if mode != modeServe {
 		changed, err := registerLink(opts)
 		if err != nil {
 			logger.Printf("error: could not register the %s:// link: %v", protocolScheme, err)
 		} else if changed {
-			linkChanged = true
-			logger.Printf("registered the %s:// link (new or changed; browsers that are already running need a restart to see it)", protocolScheme)
+			logger.Printf("registered the %s:// link (new or changed)", protocolScheme)
 		} else {
 			logger.Printf("registered the %s:// link", protocolScheme)
 		}
@@ -168,7 +166,6 @@ func serve(opts options, logger *log.Logger) int {
 		idle:        opts.idle,
 		logger:      logger,
 		elevateArgs: elevatedArgs(opts, port),
-		linkChanged: linkChanged,
 		cleanup:     platformCleanup(),
 		pick:        platformPick(),
 		reveal:      platformReveal(),

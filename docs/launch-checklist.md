@@ -43,6 +43,10 @@ DiskAtlas stays private while it is in development. These steps take it public.
 - [ ] The language switch and the light and dark themes work.
 - [ ] A last design review of everything added since the first one: the helper section, the language switch, the duplicates tab and the dialogs.
 
+## Testing note
+
+Test the `diskatlas-helper://` link with a helper that you started yourself, by double-click or from your own terminal. Tools that run commands in a sandbox can write the registry into a private layer that browsers don't see. Chrome then reports "the scheme does not have a registered handler" and asks nothing, even though the registration looks fine from inside the sandbox.
+
 ## Later
 
 - Count hard links only once (helper), so system drives add up to the space really used.

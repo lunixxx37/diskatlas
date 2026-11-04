@@ -251,9 +251,7 @@ func queryDrive(d drive) drive {
 const linkKey = `Software\Classes\` + protocolScheme
 
 // registerProtocol writes the link registration. changed reports whether it
-// was missing or pointed to another command before: browsers that were already
-// running then don't know the link until they restart, as tests with Chrome and
-// Edge showed.
+// was missing or pointed to another command before.
 func registerProtocol(command string) (changed bool, err error) {
 	changed = registeredCommand() != command
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, linkKey, registry.SET_VALUE)
@@ -306,8 +304,7 @@ func unregisterProtocol() error {
 var procSHChangeNotify = modshell32.NewProc("SHChangeNotify")
 
 // notifyAssociationsChanged tells Windows and running programs that a link
-// registration changed, as Windows asks registering programs to do. Running
-// browsers still need a restart to see a new link.
+// registration changed, as Windows asks registering programs to do.
 func notifyAssociationsChanged() {
 	const shcneAssocChanged, shcnfIDList = 0x08000000, 0
 	procSHChangeNotify.Call(shcneAssocChanged, shcnfIDList, 0, 0)

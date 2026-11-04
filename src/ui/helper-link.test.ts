@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { HelperError, type HelperClient, type HelperInfo } from '../core';
 import { HelperLink } from './helper-link';
 
-const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 1, idleTimeoutSeconds: 600, features: ['scan', 'pick'], linkChanged: false };
+const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 1, idleTimeoutSeconds: 600, features: ['scan', 'pick'] };
 
 /** A link that is connected to a client whose folder dialog answers with `pick`. */
 function connected(pick: (title: string) => Promise<string | null>, features = INFO.features) {

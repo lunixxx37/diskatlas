@@ -18,7 +18,7 @@ import {
 } from './helper';
 import type { ScanProgress } from './protocol';
 
-const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 4242, idleTimeoutSeconds: 600, features: ['scan', 'reveal', 'recycle'], linkChanged: false };
+const INFO: HelperInfo = { app: 'diskatlas-helper', version: '0.1.0', protocol: 1, os: 'windows', arch: 'amd64', elevated: false, pid: 4242, idleTimeoutSeconds: 600, features: ['scan', 'reveal', 'recycle'] };
 const url = (port: number, path: string) => `http://127.0.0.1:${port}/v1${path}`;
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -194,8 +194,6 @@ describe('reveal and recycle', () => {
     expect(asHelperInfo({ ...INFO, features: ['scan', 'reveal', 'recycle', 7] })!.features).toEqual(['scan', 'reveal', 'recycle']);
     const old = asHelperInfo({ app: 'diskatlas-helper', protocol: 1, version: '0.1.0' })!;
     expect(old.features).toEqual(['scan']);
-    expect(old.linkChanged).toBe(false);
-    expect(asHelperInfo({ ...INFO, linkChanged: true })!.linkChanged).toBe(true);
     expect(hasFeature(old, 'recycle')).toBe(false);
     expect(hasFeature(INFO, 'reveal')).toBe(true);
     expect(hasFeature(null, 'scan')).toBe(false);
