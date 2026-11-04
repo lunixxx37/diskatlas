@@ -129,3 +129,31 @@ describe('removing an entry after it went to the Recycle Bin', () => {
     expect(t.category(0)).toBe('document');
   });
 });
+
+describe('a folder deleted only in part', () => {
+  it('keeps its numbers (which entries are gone is unknown) and is marked once', () => {
+    const t = tree();
+    const videos = find(t, 'Videos');
+    const ann = find(t, 'Ann');
+    const before = [t.size(videos), t.fileCount(videos), t.size(ann), t.size(0), t.version];
+    t.markPartial(videos);
+    t.markPartial(videos);
+    expect([t.size(videos), t.fileCount(videos), t.size(ann), t.size(0)]).toEqual(before.slice(0, 4));
+    expect(t.partial(videos)).toBe(true);
+    expect(t.partial(ann)).toBe(false);
+    expect(t.partials).toEqual([videos]);
+    // Caches of results that showed it before see a change.
+    expect(t.version).toBe(before[4] + 1);
+  });
+
+  it('is no longer marked once it is removed for good (or something above it)', () => {
+    const t = tree();
+    const old = find(t, 'old');
+    t.markPartial(old);
+    t.remove(find(t, 'Videos'));
+    expect(t.partials.filter((i) => !t.removed(i))).toEqual([]);
+    // A removed entry can't be marked any more, and the root has no parent to keep it in.
+    t.markPartial(find(t, 'trip.mkv'));
+    expect(t.partials).toEqual([old]);
+  });
+});

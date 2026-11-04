@@ -34,9 +34,11 @@ export interface ResultsViewOptions {
   /** null: this tree cannot be scanned again (handed in from outside). */
   onRescan: (() => void) | null;
   onOtherFolder: () => void;
+  /** Back to the start page (this result stays in memory). */
+  onHome?: (() => void) | null;
   /** A helper scan without administrator rights, helper connected: restart it elevated and scan again. */
   onElevate?: (() => Promise<void>) | null;
-  /** Show in Explorer / Move to Recycle Bin (helper scans whose helper offers them); null otherwise. */
+  /** Show in Explorer, Move to Recycle Bin, Delete permanently (helper scans whose helper offers them); null otherwise. */
   cleanup?: Cleanup | null;
   /** State of an earlier view of the same tree (the language changed): carry on from there. */
   restore?: ResultsState;
@@ -236,7 +238,8 @@ export class ResultsView {
     if (this.tree.isDir(entry) && entry !== this.current) items.push({ label: t.results.openFolder, icon: 'folder', run: () => this.navigate(entry) });
     items.push({ label: t.cleanup.copyPath, icon: 'copy', run: () => void this.copyPath(entry) });
     if (cleanup?.canReveal(entry)) items.push({ label: t.cleanup.reveal, icon: 'folderOpen', run: () => cleanup.reveal(entry, returnFocus) });
-    if (cleanup?.canRecycle(entry)) items.push({ label: `${t.cleanup.recycle}…`, icon: 'trash', danger: true, run: () => cleanup.recycle(entry, returnFocus) });
+    if (cleanup?.canRecycle(entry)) items.push({ label: `${t.cleanup.recycle}…`, icon: 'trash', danger: true, run: () => cleanup.remove(entry, returnFocus, 'recycle') });
+    if (cleanup?.canDelete(entry)) items.push({ label: `${t.cleanup.deletePermanently}…`, icon: 'trashX', danger: true, run: () => cleanup.remove(entry, returnFocus, 'permanent') });
     openContextMenu(at, { label: `${t.cleanup.menu}: ${displayName(this.tree, entry)}`, items }, returnFocus);
   }
 
@@ -425,6 +428,13 @@ export class ResultsView {
 
   private buildActions(): HTMLElement {
     const actions = h('div', { class: 'topbar__actions' });
+    if (this.options.onHome) {
+      // Navigation, not "up one folder" (that one is in the folder path below): the start page, with its own label.
+      const home = h('button', { class: 'btn btn--ghost topbar__home', type: 'button', title: t.results.homeTitle }, icon('home'), h('span', { class: 'btn__label btn__label--home', text: t.results.home }));
+      home.setAttribute('aria-label', t.results.home);
+      home.addEventListener('click', this.options.onHome);
+      actions.append(home, h('span', { class: 'topbar__divider', 'aria-hidden': 'true' }));
+    }
     if (this.options.onRescan) {
       const rescan = h('button', { class: 'btn btn--ghost', type: 'button', title: t.results.rescanTitle }, icon('refresh'), h('span', { class: 'btn__label', text: t.results.rescan }));
       rescan.setAttribute('aria-label', t.results.rescan);
@@ -556,6 +566,14 @@ export class ResultsView {
     if (tree.meta.source === 'demo') {
       const action = h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: this.options.onOtherFolder }, icon('folderOpen'), t.results.demoOwn);
       out.push(banner('info', 'map', t.results.demoTitle, t.results.demoText, action));
+    }
+    // Folders deleted only in part: which of their entries are gone is unknown.
+    const partial = tree.partials.filter((i) => !tree.removed(i));
+    if (partial.length > 0) {
+      const action = this.options.onRescan
+        ? h('button', { class: 'btn btn--secondary btn--sm', type: 'button', onclick: this.options.onRescan }, icon('refresh'), t.cleanup.rescan)
+        : null;
+      out.push(banner('warn', 'alert', t.results.partialTitle, t.results.partialText(partial.map((i) => t.results.quoted(displayName(tree, i))).join(', ')), action));
     }
     return out.length ? [h('div', { class: 'banners' }, ...out)] : [];
   }

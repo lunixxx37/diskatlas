@@ -256,7 +256,7 @@
   height: 13px;
 }
 
-.tr:is([data-flag="locked"], [data-flag="deep"], [data-flag="link"], [data-flag="cloud"]) .tr__flag {
+.tr:is([data-flag="partial"], [data-flag="locked"], [data-flag="deep"], [data-flag="link"], [data-flag="cloud"]) .tr__flag {
   display: inline-flex;
 }
 
@@ -265,6 +265,7 @@
   display: none;
 }
 
+.tr[data-flag="partial"] .tr__flag-partial,
 .tr[data-flag="locked"] .tr__flag-locked,
 .tr[data-flag="deep"] .tr__flag-deep,
 .tr[data-flag="link"] .tr__flag-link,

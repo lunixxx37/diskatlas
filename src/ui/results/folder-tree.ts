@@ -1,5 +1,5 @@
 import { formatBytes, formatCount, formatDate, formatPercent, type ScanTree } from '../../core';
-import type { EntryActions } from '../cleanup';
+import { cleanupKey, type EntryActions } from '../cleanup';
 import { h, setText, uniqueId } from '../dom';
 import { displayName, displayPath, splitPath } from '../format';
 import { lang, plural, t, type Lang } from '../i18n';
@@ -48,17 +48,20 @@ const DATE_WIDTH: Record<Lang, number> = { de: 78, en: 92 };
 const ALLOC_WIDTH = 72;
 
 /** What is special about an entry, for the row's marker. */
-export type EntryFlag = 'locked' | 'deep' | 'link' | 'cloud' | '';
+export type EntryFlag = 'partial' | 'locked' | 'deep' | 'link' | 'cloud' | '';
 
 export function entryFlag(tree: ScanTree, i: number): EntryFlag {
+  if (tree.partial(i)) return 'partial';
   return tree.unreadable(i) ? 'locked' : tree.tooDeep(i) ? 'deep' : tree.link(i) ? 'link' : tree.cloud(i) ? 'cloud' : '';
 }
 
-export const FLAG_ICONS: Record<Exclude<EntryFlag, ''>, IconName> = { locked: 'lock', deep: 'layers', link: 'link', cloud: 'cloud' };
+export const FLAG_ICONS: Record<Exclude<EntryFlag, ''>, IconName> = { partial: 'alert', locked: 'lock', deep: 'layers', link: 'link', cloud: 'cloud' };
 
 /** Why an entry has no (complete) size, or what else is special about it; null for ordinary entries. */
 export function flagText(tree: ScanTree, i: number): string | null {
   switch (entryFlag(tree, i)) {
+    case 'partial':
+      return t.flags.partial;
     case 'locked':
       if (tree.meta.source === 'helper') return tree.isDir(i) ? t.flags.helperUnreadableFolder : t.flags.helperUnreadableFile;
       return tree.isDir(i) ? t.flags.unreadableFolder : t.flags.unreadableFile;
@@ -179,7 +182,7 @@ export class FolderTree {
       this.selReveal = h('button', { class: 'btn btn--ghost btn--sm', type: 'button', hidden: true }, icon('folderOpen'), h('span', { class: 'selbar__label', text: t.cleanup.reveal }));
       this.selReveal.addEventListener('click', () => actions.reveal(this.selected, this.selReveal));
       this.selRecycle = h('button', { class: 'btn btn--ghost btn--sm selbar__recycle', type: 'button', hidden: true }, icon('trash'), h('span', { class: 'selbar__label', text: t.cleanup.recycle }));
-      this.selRecycle.addEventListener('click', () => actions.recycle(this.selected, this.selRecycle));
+      this.selRecycle.addEventListener('click', () => actions.remove(this.selected, this.selRecycle));
     }
     this.selIcon = h('span', { class: 'selbar__icon' });
     this.selHead = h('span', { class: 'mtrunc__head' });
@@ -668,6 +671,10 @@ export class FolderTree {
         event.preventDefault();
         this.openRowMenu(row);
         return;
+      case 'Delete':
+        // Delete: the Recycle Bin; Shift+Delete: delete permanently (both through the dialog).
+        cleanupKey(this.options.actions, event, entry, this.treeEl);
+        return;
       case ' ': {
         // Never scroll the list away from the active row; a space can continue a type-ahead search.
         event.preventDefault();
@@ -744,7 +751,14 @@ export class FolderTree {
     const actions = this.options.actions;
     if (actions && this.selReveal && this.selRecycle) {
       this.selReveal.hidden = !actions.canReveal(entry);
-      this.selRecycle.hidden = !actions.canRecycle(entry);
+      const recycle = actions.canRecycle(entry);
+      this.selRecycle.hidden = !recycle && !actions.canDelete(entry);
+      // A helper that can only delete permanently (no Recycle Bin): say so on the button.
+      const label = recycle ? t.cleanup.recycle : t.cleanup.deletePermanently;
+      if (this.selRecycle.dataset.label !== label) {
+        this.selRecycle.dataset.label = label;
+        this.selRecycle.replaceChildren(icon(recycle ? 'trash' : 'trashX'), h('span', { class: 'selbar__label', text: label }));
+      }
     }
   }
 }

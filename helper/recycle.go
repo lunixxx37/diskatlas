@@ -8,17 +8,20 @@ import (
 	"unicode/utf16"
 )
 
-// POST /v1/recycle (docs/helper-protocol.md): the only case in which the
-// helper changes files. Each item passes these checks in order, and the first
-// one that fails sets its status. Only then does it go to the Recycle Bin.
+// POST /v1/recycle and POST /v1/delete (docs/helper-protocol.md): the only
+// cases in which the helper changes files. Each item passes the same checks
+// in order, and the first one that fails sets its status. Only then does it
+// go to the Recycle Bin, or get deleted permanently.
 const (
 	statusInvalid     = "invalid"     // not an absolute, clean, non-device path
 	statusNotFound    = "not_found"   // gone since the scan
 	statusChanged     = "changed"     // another type, size or last write time
 	statusProtected   = "protected"   // a protected location
-	statusUnsupported = "unsupported" // no Recycle Bin, too long for the shell, or reached through a link
+	statusUnsupported = "unsupported" // a drive without the action, too long for the shell, or reached through a link
 	statusOK          = "ok"          // every check passed (dry run)
 	statusRecycled    = "recycled"
+	statusDeleted     = "deleted"
+	statusPartial     = "partial" // a folder of which some entries couldn't be deleted
 	statusFailed      = "failed"
 )
 
@@ -26,6 +29,7 @@ const (
 	maxRecycleItems  = 100
 	mtimeToleranceMs = 2000
 	shellPathLimit   = 259 // MAX_PATH without the terminator
+	confirmPermanent = "permanent"
 )
 
 // errDeleteDeclined: Windows would have deleted the item permanently (for
@@ -47,6 +51,16 @@ type recycleResult struct {
 	Message string `json:"message"`
 }
 
+// deleteResult is one result of /v1/delete. The counts are 0 in a dry run.
+type deleteResult struct {
+	Path           string `json:"path"`
+	Status         string `json:"status"`
+	DeletedFiles   int    `json:"deletedFiles"`
+	DeletedFolders int    `json:"deletedFolders"`
+	FailedEntries  int    `json:"failedEntries"`
+	Message        string `json:"message"`
+}
+
 // itemInfo is what the helper finds at an item's path now.
 type itemInfo struct {
 	isDir     bool
@@ -56,28 +70,81 @@ type itemInfo struct {
 	finalPath string  // where the path really leads, cleaned; "" if unknown
 }
 
-// recycleSystem is what the checks need from Windows. The real one is in
-// recycle_windows.go; tests use a fake.
-type recycleSystem interface {
+// deleteCounts is what a permanent deletion did.
+type deleteCounts struct {
+	files, folders, failed int    // deleted files and links to files; deleted folders and folder links; entries left in place
+	firstPath              string // the first entry that couldn't be deleted
+	firstErr               error
+}
+
+// fail counts an entry that couldn't be deleted.
+func (c *deleteCounts) fail(path string, err error) {
+	c.failed++
+	if c.firstErr == nil {
+		c.firstPath, c.firstErr = path, err
+	}
+}
+
+// cleanupSystem is what recycling and deleting need from Windows. The real
+// one is in recycle_windows.go and delete_windows.go; tests use a fake.
+type cleanupSystem interface {
 	// inspect opens the item for its attributes only, without data access,
 	// so cloud files aren't downloaded. A missing item is errPathNotFound.
 	inspect(path string) (itemInfo, error)
 	// locations lists the folders the protection rules are built from.
 	locations() (knownLocations, error)
-	// fixedDrive reports whether path is on a local fixed drive, which has a
-	// Recycle Bin.
-	fixedDrive(path string) bool
+	// driveType is the type of the drive path is on, as /v1/drives names
+	// it: "fixed", "removable", "network", … Network paths are "network".
+	driveType(path string) string
 	// win32Path is the path as the shell will read it (GetFullPathNameW).
 	// It differs for names Win32 rewrites, such as one ending in a dot.
 	win32Path(path string) (string, error)
 	// recycle moves path to the Recycle Bin, never deleting it permanently
 	// without asking. A refusal by the user is errDeleteDeclined.
 	recycle(path string) error
+	// deleteItem deletes a file, or a folder depth first, permanently. Links
+	// inside a folder are removed as links; their targets are never entered.
+	// Entries that can't be deleted are left in place and counted.
+	deleteItem(path string, isDir bool) deleteCounts
+	// asUser runs f with the user's normal rights: when the helper is
+	// elevated, on a thread that impersonates the user's unelevated token
+	// (the shell thread if shell is set). It fails if that can't be set up.
+	asUser(shell bool, f func()) error
+	// rightsCheck reports whether the current thread runs with the user's
+	// normal rights; it is called before each item.
+	rightsCheck() error
 }
+
+// msgNoUserRights is the message of every item refused because the
+// helper couldn't drop its administrator rights.
+const msgNoUserRights = "could not drop administrator rights"
+
+// cleanupRules are the few checks in which recycling and deleting differ.
+type cleanupRules struct {
+	verb     string          // "recycled" or "deleted", for messages
+	drives   map[string]bool // allowed drive types
+	driveMsg string
+	maxPath  int // in UTF-16 characters; 0: no limit
+}
+
+var (
+	recycleRules = cleanupRules{
+		verb:     "recycled",
+		drives:   map[string]bool{"fixed": true},
+		driveMsg: "only items on a local fixed drive can be recycled; other drives and network shares have no Recycle Bin",
+		maxPath:  shellPathLimit, // SHFileOperationW
+	}
+	deleteRules = cleanupRules{
+		verb:     "deleted",
+		drives:   map[string]bool{"fixed": true, "removable": true},
+		driveMsg: "only items on a local fixed or removable drive can be deleted; network shares and other drives are not supported",
+		// No limit: the deletion uses \\?\ paths, not the shell.
+	}
+)
 
 // runRecycle checks every item and, unless dryRun, recycles those that pass,
 // one at a time, so a failure doesn't affect the others.
-func runRecycle(sys recycleSystem, items []recycleItem, dryRun bool) ([]recycleResult, error) {
+func runRecycle(sys cleanupSystem, items []recycleItem, dryRun bool) ([]recycleResult, error) {
 	loc, err := sys.locations()
 	if err != nil {
 		return nil, fmt.Errorf("could not work out the protected locations: %w", err)
@@ -85,7 +152,11 @@ func runRecycle(sys recycleSystem, items []recycleItem, dryRun bool) ([]recycleR
 	prot := newProtection(loc)
 	results := make([]recycleResult, len(items))
 	for i, it := range items {
-		status, msg := checkItem(sys, prot, it)
+		if sys.rightsCheck() != nil {
+			results[i] = recycleResult{Path: it.Path, Status: statusFailed, Message: msgNoUserRights}
+			continue
+		}
+		status, msg := checkItem(sys, prot, it, recycleRules)
 		if status == statusOK && !dryRun {
 			status, msg = recycleNow(sys, it.Path)
 		}
@@ -94,9 +165,104 @@ func runRecycle(sys recycleSystem, items []recycleItem, dryRun bool) ([]recycleR
 	return results, nil
 }
 
+// runDelete checks every item like runRecycle and, unless dryRun, deletes
+// those that pass permanently, one at a time.
+func runDelete(sys cleanupSystem, items []recycleItem, dryRun bool) ([]deleteResult, error) {
+	loc, err := sys.locations()
+	if err != nil {
+		return nil, fmt.Errorf("could not work out the protected locations: %w", err)
+	}
+	prot := newProtection(loc)
+	results := make([]deleteResult, len(items))
+	for i, it := range items {
+		if sys.rightsCheck() != nil {
+			results[i] = deleteResult{Path: it.Path, Status: statusFailed, Message: msgNoUserRights}
+			continue
+		}
+		status, msg := checkItem(sys, prot, it, deleteRules)
+		if status == statusOK && !dryRun {
+			results[i] = deleteNow(sys, it.Path, *it.IsDir)
+			continue
+		}
+		results[i] = deleteResult{Path: it.Path, Status: status, Message: msg}
+	}
+	return results, nil
+}
+
+// recycleAsUser and deleteAsUser run a request with the user's normal
+// rights. If those can't be set up, every item is refused as failed and
+// dropErr says why (for the log); err is any other error.
+func recycleAsUser(sys cleanupSystem, items []recycleItem, dryRun bool) (results []recycleResult, err, dropErr error) {
+	if dropErr = sys.asUser(true, func() { results, err = runRecycle(sys, items, dryRun) }); dropErr != nil {
+		results = make([]recycleResult, len(items))
+		for i, it := range items {
+			results[i] = recycleResult{Path: it.Path, Status: statusFailed, Message: msgNoUserRights}
+		}
+		return results, nil, dropErr
+	}
+	return results, err, nil
+}
+
+func deleteAsUser(sys cleanupSystem, items []recycleItem, dryRun bool) (results []deleteResult, err, dropErr error) {
+	if dropErr = sys.asUser(false, func() { results, err = runDelete(sys, items, dryRun) }); dropErr != nil {
+		results = make([]deleteResult, len(items))
+		for i, it := range items {
+			results[i] = deleteResult{Path: it.Path, Status: statusFailed, Message: msgNoUserRights}
+		}
+		return results, nil, dropErr
+	}
+	return results, err, nil
+}
+
+// deleteNow deletes an item that passed the checks and checks afterwards
+// whether it is really gone.
+func deleteNow(sys cleanupSystem, p string, isDir bool) deleteResult {
+	c := sys.deleteItem(p, isDir)
+	r := deleteResult{Path: p, DeletedFiles: c.files, DeletedFolders: c.folders, FailedEntries: c.failed}
+	_, err := sys.inspect(p)
+	gone := errors.Is(err, errPathNotFound)
+	switch {
+	case gone:
+		r.Status = statusDeleted
+	case isDir && c.files+c.folders > 0:
+		r.Status = statusPartial // some of what was inside is gone
+	default:
+		r.Status = statusFailed
+		if !isDir {
+			r.DeletedFiles = 0 // the file is still there
+		}
+	}
+	if !gone {
+		switch {
+		case c.failed == 1:
+			r.Message = fmt.Sprintf("1 entry could not be deleted: %s: %s", c.firstPath, deleteErrorText(c.firstErr))
+		case c.failed > 1:
+			r.Message = fmt.Sprintf("%d entries could not be deleted, first: %s: %s", c.failed, c.firstPath, deleteErrorText(c.firstErr))
+		default:
+			r.Message = "Windows reported success, but the item is still there"
+		}
+	}
+	return r
+}
+
+// errPathChanged: during the deletion a folder was no longer what the checks
+// saw, for example because it had been replaced by a junction.
+var errPathChanged = errors.New("the path changed while it was being deleted")
+
+// deleteErrorText is a short English description of a deletion error.
+func deleteErrorText(err error) string {
+	if err == nil {
+		return "unknown error"
+	}
+	if errors.Is(err, errPathChanged) {
+		return err.Error()
+	}
+	return friendlyError(err)
+}
+
 // checkItem runs the checks in the documented order: invalid, not_found,
 // changed, protected, unsupported.
-func checkItem(sys recycleSystem, prot *protection, it recycleItem) (string, string) {
+func checkItem(sys cleanupSystem, prot *protection, it recycleItem, rules cleanupRules) (string, string) {
 	p, err := cleanWindowsPath(it.Path)
 	switch {
 	case it.Path == "":
@@ -145,16 +311,16 @@ func checkItem(sys recycleSystem, prot *protection, it recycleItem) (string, str
 	}
 
 	switch {
-	case !sys.fixedDrive(p):
-		return statusUnsupported, "only items on a local fixed drive can be recycled; other drives and network shares have no Recycle Bin"
-	case len(utf16.Encode([]rune(p))) > shellPathLimit:
-		return statusUnsupported, fmt.Sprintf("the path is longer than the %d characters the Windows shell can handle", shellPathLimit)
+	case !rules.drives[sys.driveType(p)]:
+		return statusUnsupported, rules.driveMsg
+	case rules.maxPath > 0 && len(utf16.Encode([]rune(p))) > rules.maxPath:
+		return statusUnsupported, fmt.Sprintf("the path is longer than the %d characters the Windows shell can handle", rules.maxPath)
 	case info.link:
-		return statusUnsupported, "it is a link (a symbolic link, junction or mount point); only items reached without links can be recycled"
+		return statusUnsupported, "it is a link (a symbolic link, junction or mount point); only items reached without links can be " + rules.verb
 	case info.finalPath == "":
 		return statusUnsupported, "could not find out where the path leads"
 	case !samePath(info.finalPath, p):
-		return statusUnsupported, "the path leads elsewhere, to " + info.finalPath + ", for example through a junction; only items reached without links can be recycled"
+		return statusUnsupported, "the path leads elsewhere, to " + info.finalPath + ", for example through a junction or a short name; only items reached without links can be " + rules.verb
 	}
 	if w, err := sys.win32Path(p); err != nil || w != p {
 		return statusUnsupported, "Windows would read this name differently (for example because it ends with a dot or a space, or is a device name such as NUL)"
@@ -163,7 +329,7 @@ func checkItem(sys recycleSystem, prot *protection, it recycleItem) (string, str
 }
 
 // recycleNow moves an item that passed the checks to the Recycle Bin.
-func recycleNow(sys recycleSystem, p string) (string, string) {
+func recycleNow(sys cleanupSystem, p string) (string, string) {
 	if err := sys.recycle(p); err != nil {
 		if errors.Is(err, errDeleteDeclined) {
 			return statusFailed, err.Error()
@@ -226,7 +392,7 @@ type knownLocations struct {
 }
 
 // The folders of every user profile that are protected themselves (their
-// contents can be recycled).
+// contents are not).
 var profileSubfolders = []string{
 	`AppData`, `AppData\Local`, `AppData\Roaming`,
 	`Desktop`, `Documents`, `Downloads`, `Pictures`, `Music`, `Videos`,
@@ -266,7 +432,7 @@ func newProtection(loc knownLocations) *protection {
 		tree(dir)
 	}
 
-	const contentsAllowed = "; what is inside it can be recycled"
+	const contentsAllowed = ", but not what is inside it"
 	if exe, err := cleanWindowsPath(loc.exe); err == nil {
 		exact(exe, "this is the DiskAtlas Helper itself")
 		// The helper's folder, and the folders above it up to the drive root
@@ -306,7 +472,7 @@ func (p *protection) check(raw string) (string, bool) {
 	}
 	_, rest := splitVolume(key)
 	if rest == "" {
-		return "a drive root can't be recycled", true
+		return "a drive root is protected", true
 	}
 	first, _, inside := strings.Cut(rest, `\`)
 	if first == "$RECYCLE.BIN" || first == "SYSTEM VOLUME INFORMATION" {

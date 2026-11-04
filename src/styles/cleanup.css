@@ -25,6 +25,12 @@
   padding: 20px 22px 18px;
 }
 
+.modal__body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
 .modal__title {
   font-size: 19px;
   font-weight: 680;
@@ -39,11 +45,17 @@
 }
 
 .modal__actions {
+  /* Stays at the bottom while a tall dialog scrolls on a small screen. */
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 2px;
+  margin: 2px -22px -18px;
+  padding: 8px 22px 18px;
+  background: var(--panel);
 }
 
 .modal__actions .btn[hidden] {
@@ -77,6 +89,9 @@
 }
 
 .recycle__path {
+  /* Very long paths scroll inside, so the buttons stay in reach on phones. */
+  max-height: calc(6 * 1.45em);
+  overflow-y: auto;
   color: var(--ink-2);
   font-size: 12.5px;
   line-height: 1.45;
@@ -152,6 +167,144 @@
 
 .recycle__status[data-tone="warn"] > svg {
   color: var(--warn);
+}
+
+.recycle__notes {
+  display: grid;
+  gap: 10px;
+}
+
+.recycle__notes[hidden],
+.recycle__understand[hidden],
+.recycle__instead[hidden] {
+  display: none;
+}
+
+/* ---------- Delete permanently ---------- */
+
+/* The mode: two segments, "Move to Recycle Bin" and "Delete permanently". */
+.recycle__modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--paper);
+}
+
+.recycle__modes + .modal__lede {
+  margin-top: 0;
+}
+
+.recycle__mode {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  cursor: pointer;
+}
+
+.recycle__mode input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.recycle__mode svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.recycle__mode:has(input:checked) {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink);
+}
+
+.recycle__mode--permanent:has(input:checked) {
+  background: var(--danger-wash);
+  box-shadow: inset 0 0 0 1px var(--danger);
+  color: var(--danger-text);
+}
+
+.recycle__mode:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.recycle__mode:has(input:disabled) {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Permanent mode: a red edge, and the warning in place of the lede. */
+.modal[data-mode="permanent"] {
+  border-top: 3px solid var(--danger);
+}
+
+.modal__lede.recycle__danger {
+  display: flex;
+  gap: 9px;
+  margin-top: 0;
+  padding: 9px 12px;
+  border-left: 2px solid var(--danger);
+  background: var(--danger-wash);
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.recycle__danger svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--danger-text);
+}
+
+.recycle__understand {
+  align-items: flex-start;
+  color: var(--ink);
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.recycle__understand input {
+  margin-top: 1px;
+  accent-color: var(--danger);
+}
+
+/* Where the Recycle Bin can't take it but deleting permanently can. */
+.recycle__instead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.recycle__instead p {
+  flex: 1 1 220px;
 }
 
 /* The one destructive action: red, filled. */

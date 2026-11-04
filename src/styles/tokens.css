@@ -46,6 +46,7 @@
   --danger-text: #b42318;
   /* Behind a modal dialog. */
   --scrim: rgb(16 20 23 / 0.5);
+  --danger-wash: rgb(180 35 24 / 0.08);
   --warn-wash: rgb(176 112 20 / 0.1);
   --warn-line: rgb(138 83 0 / 0.35);
 
@@ -121,6 +122,7 @@
     --on-danger: #ffffff;
     --danger-text: #ff8f85;
     --scrim: rgb(0 0 0 / 0.62);
+    --danger-wash: rgb(255 120 110 / 0.1);
     --warn-wash: rgb(224 166 74 / 0.09);
     --warn-line: rgb(224 166 74 / 0.32);
 
@@ -187,6 +189,7 @@
   --on-danger: #ffffff;
   --danger-text: #ff8f85;
   --scrim: rgb(0 0 0 / 0.62);
+  --danger-wash: rgb(255 120 110 / 0.1);
   --warn-wash: rgb(224 166 74 / 0.09);
   --warn-line: rgb(224 166 74 / 0.32);
 

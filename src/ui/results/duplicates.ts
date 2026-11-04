@@ -9,7 +9,7 @@ import {
   type DuplicateResult,
   type ScanTree,
 } from '../../core';
-import { entryButtons, type EntryActions } from '../cleanup';
+import { cleanupKey, entryButtons, type EntryActions } from '../cleanup';
 import { h, uniqueId } from '../dom';
 import { displayName, folderBelow, splitPath } from '../format';
 import { plural, t } from '../i18n';
@@ -91,6 +91,11 @@ export class DuplicatesPanel {
     this.body.addEventListener('click', (event) => {
       const target = (event.target as Element).closest<HTMLElement>('[data-select]');
       if (target) options.onSelect(Number(target.dataset.select));
+    });
+    // Delete / Shift+Delete on a copy: the clean-up dialog for it.
+    this.body.addEventListener('keydown', (event) => {
+      const target = (event.target as Element).closest<HTMLElement>('[data-select]');
+      if (target) cleanupKey(options.actions, event, Number(target.dataset.select), target);
     });
   }
 

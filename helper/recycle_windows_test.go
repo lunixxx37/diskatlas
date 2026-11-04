@@ -84,8 +84,8 @@ func TestInspect(t *testing.T) {
 	if _, err := sys.inspect(filepath.Join(dir, "missing", "deeper.txt")); !errors.Is(err, errPathNotFound) {
 		t.Errorf("missing folder: %v", err)
 	}
-	if !sys.fixedDrive(`C:\`) || sys.fixedDrive(`\\server\share\x`) {
-		t.Errorf("fixedDrive: C: %t, network %t", sys.fixedDrive(`C:\`), sys.fixedDrive(`\\server\share\x`))
+	if c, n := sys.driveType(`C:\Users`), sys.driveType(`\\server\share\x`); c != "fixed" || n != "network" {
+		t.Errorf("driveType: C: %s, network path %s", c, n)
 	}
 }
 
@@ -172,7 +172,7 @@ func TestRealChecksDryRun(t *testing.T) {
 
 	items := []recycleItem{item("keep.txt"), item("folder"), item("junc"), through, item("grows.txt"), item("vanishes.txt"), item("dot.")}
 	want := []string{statusOK, statusOK, statusUnsupported, statusUnsupported, statusChanged, statusNotFound, statusUnsupported}
-	results, err := runRecycle(windowsRecycle{}, items, true)
+	results, err, _ := recycleAsUser(windowsRecycle{}, items, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestPagefileIsProtected(t *testing.T) {
 	}
 	windows.FindClose(h)
 	size := float64(uint64(fd.FileSizeHigh)<<32 | uint64(fd.FileSizeLow))
-	results, err := runRecycle(windowsRecycle{}, []recycleItem{fileItem(`C:\pagefile.sys`, size, filetimeToMs(filetime64(fd.LastWriteTime)))}, true)
+	results, err, _ := recycleAsUser(windowsRecycle{}, []recycleItem{fileItem(`C:\pagefile.sys`, size, filetimeToMs(filetime64(fd.LastWriteTime)))}, true)
 	if err != nil || results[0].Status != statusProtected {
 		t.Errorf("C:\\pagefile.sys: %+v, %v", results, err)
 	}
@@ -248,7 +248,7 @@ func TestRealRecycle(t *testing.T) {
 	writeTestFile(t, file, 42)
 	_, d := scanTree(t, dir, false)
 	i := d.byPath(t)["DiskAtlas-recycle-test.txt"]
-	results, err := runRecycle(windowsRecycle{}, []recycleItem{fileItem(file, d.size[i], d.mtime[i])}, false)
+	results, err, _ := recycleAsUser(windowsRecycle{}, []recycleItem{fileItem(file, d.size[i], d.mtime[i])}, false)
 	if err != nil || results[0].Status != statusRecycled {
 		t.Fatalf("recycle: %+v, %v", results, err)
 	}

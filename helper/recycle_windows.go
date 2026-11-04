@@ -20,11 +20,12 @@ var (
 	procGetFullPathNameW           = modkernel32.NewProc("GetFullPathNameW")
 )
 
-func platformRecycle() recycleSystem { return windowsRecycle{} }
+func platformCleanup() cleanupSystem { return windowsRecycle{} }
 
 func platformReveal() func(string) error { return revealItem }
 
-// windowsRecycle is the real recycleSystem.
+// windowsRecycle is the real cleanupSystem (recycling here, deleting in
+// delete_windows.go).
 type windowsRecycle struct{}
 
 // fileBasicInfo is FILE_BASIC_INFO, fileStandardInfo FILE_STANDARD_INFO and
@@ -160,14 +161,14 @@ func (windowsRecycle) locations() (knownLocations, error) {
 	return loc, nil
 }
 
-// fixedDrive reports whether the drive is a local fixed one. Network paths
-// have no Recycle Bin.
-func (windowsRecycle) fixedDrive(p string) bool {
+// driveType is the type of the path's drive, named as in /v1/drives. A
+// network path (\\server\share) is "network". A SUBST drive reports the type
+// of the drive behind it, but its final path differs, so the checks refuse it.
+func (windowsRecycle) driveType(p string) string {
 	if len(p) < 3 || p[1] != ':' || p[2] != '\\' {
-		return false
+		return "network"
 	}
-	root, err := windows.UTF16PtrFromString(p[:3])
-	return err == nil && windows.GetDriveType(root) == windows.DRIVE_FIXED
+	return driveType(p[:3])
 }
 
 // win32Path is GetFullPathNameW: the path after Win32's rewriting, which the
@@ -212,7 +213,7 @@ func (windowsRecycle) recycle(p string) error {
 		return err
 	}
 	from = append(from, 0) // the list of paths ends with an empty one
-	return theShell.run(func() error {
+	op := func() error {
 		op := shFileOpStruct{
 			hwnd:   uintptr(windows.GetForegroundWindow()),
 			wFunc:  foDelete,
@@ -227,7 +228,13 @@ func (windowsRecycle) recycle(p string) error {
 			return shFileOpError(r)
 		}
 		return nil
-	})
+	}
+	// A recycle request runs on the shell thread already (asUser), with the
+	// user's normal rights in place; SHFileOperationW honors them.
+	if theShell.isCurrent() {
+		return op()
+	}
+	return theShell.run(op)
 }
 
 const deOpCancelled = 0x75

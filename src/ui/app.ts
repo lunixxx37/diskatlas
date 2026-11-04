@@ -14,13 +14,15 @@ import {
   type ScanTree,
 } from '../core';
 import { APP_NAME } from './brand';
-import { Cleanup } from './cleanup';
+import { Cleanup, type CleanupMode } from './cleanup';
 import { h, setText } from './dom';
 import { displayName } from './format';
 import { HelperLink, isWindowsDesktop } from './helper-link';
 import { detectLanguage, lang, setLanguage, storeLanguage, storedLanguage, t, type Lang } from './i18n';
 import { brandGlyph, icon } from './icons';
 import { LangSwitch } from './lang-switch';
+import type { LastResultInfo } from './last-result';
+import { Navigation, readNavState } from './navigation';
 import { ResultsView, type ResultsState } from './results/results-view';
 import { ScanView, noticeView, type ScanViewState } from './scan-view';
 import { StartView, type Support } from './start-view';
@@ -38,6 +40,17 @@ type Source =
 interface View {
   el: HTMLElement;
   destroy(): void;
+}
+
+/** The result kept in memory: the start page offers it again, Forward brings it back. */
+interface LastResult {
+  id: number;
+  tree: ScanTree;
+  source: Source | null;
+  /** When the survey finished (or was stopped). */
+  at: number;
+  /** Where its view stood when it was left (folder, tab, selection, tree). */
+  state?: ResultsState;
 }
 
 type ViewName = 'start' | 'scan' | 'results' | 'notice';
@@ -83,6 +96,17 @@ export class App {
   private running: RunningScan | null = null;
   private token = 0;
   private dragDepth = 0;
+  private readonly nav = new Navigation(window.history);
+  private last: LastResult | null = null;
+  /** Numbers results (and their history entries). */
+  private resultSeq = 0;
+  /** The result id of the running survey. */
+  private runningId = 0;
+  /** The user went to the start page during the survey: its (partial) result is kept, not shown. */
+  private detached = false;
+  /** After the next return to the start page, scroll to the helper section. */
+  private toHelper = false;
+  private readonly wordmark: HTMLAnchorElement;
 
   constructor(root: HTMLElement) {
     setLanguage(storedLanguage() ?? detectLanguage());
@@ -92,10 +116,17 @@ export class App {
     this.langSwitch = new LangSwitch(this.changeLanguage);
     this.context = h('div', { class: 'topbar__slot topbar__slot--context' });
     this.actions = h('div', { class: 'topbar__slot topbar__slot--actions' });
+    // The wordmark leads to the start page (a real link, so it also opens in a new tab).
+    this.wordmark = h('a', { class: 'wordmark', href: location.pathname }, brandGlyph(), h('span', { class: 'wordmark__text', text: APP_NAME }));
+    this.wordmark.addEventListener('click', (event) => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      this.goHome();
+    });
     const topbar = h(
       'header',
       { class: 'topbar' },
-      h('div', { class: 'topbar__brand' }, h('span', { class: 'wordmark' }, brandGlyph(), h('span', { class: 'wordmark__text', text: APP_NAME }))),
+      h('div', { class: 'topbar__brand' }, this.wordmark),
       this.context,
       this.actions,
       h('div', { class: 'topbar__prefs' }, this.langSwitch.el, this.themeSwitch.el),
@@ -130,10 +161,13 @@ export class App {
     this.relabelShell();
     root.replaceChildren(this.shell);
     this.installDragAndDrop();
+    window.addEventListener('popstate', this.onPopState);
   }
 
   /** Opens the start view, or plays the demo right away for `?demo`. */
   start(): void {
+    // This entry is the start page; a survey adds one entry after it.
+    this.nav.start();
     if (new URLSearchParams(location.search).has('demo')) this.runDemo();
     else this.showStart();
     // Back to a helper used before, only if that can't bring up a permission prompt.
@@ -145,6 +179,10 @@ export class App {
     this.token++;
     this.cancelRunning();
     this.source = null;
+    this.keepResultState();
+    const id = ++this.resultSeq;
+    this.nav.enter(id);
+    this.last = { id, tree, source: null, at: Date.now() };
     this.showResults(tree);
   }
 
@@ -172,12 +210,107 @@ export class App {
 
   /** Text in the parts of the page that stay while views change. */
   private relabelShell(): void {
+    this.wordmark.setAttribute('aria-label', t.app.wordmarkLabel);
     setText(this.skipLink, t.app.skipLink);
     setText(this.dropText, t.app.dropOverlay);
     setText(this.footerClaim, t.app.footerClaim);
     setText(this.footerUnits, t.app.footerUnits);
     this.themeSwitch.relabel();
     this.langSwitch.relabel();
+  }
+
+  // ---------- start page and history ----------
+
+  /** The wordmark, "Start page", "Back to the start page": back in history when possible, so Forward returns. */
+  private readonly goHome = (): void => {
+    if (this.nav.home() !== 'back') this.showHome();
+    // 'back': the popstate that follows shows the start page.
+  };
+
+  /** Back or Forward in the browser. */
+  private readonly onPopState = (event: PopStateEvent): void => {
+    const state = readNavState(event.state);
+    if (state?.view === 'result') this.showLast(state.id);
+    else this.showHome();
+  };
+
+  /**
+   * The start page, with the result kept in memory. A running survey stops: what it read
+   * until then becomes the last result (it isn't shown, the user wanted the start page).
+   */
+  private showHome(): void {
+    if (this.running) {
+      this.detached = true;
+      this.running.cancel();
+      toast(t.app.homeStopped, 'info', 6000);
+    }
+    this.keepResultState();
+    if (this.shell.dataset.view === 'start' && this.startView) {
+      window.scrollTo(0, 0);
+    } else {
+      this.showStart();
+    }
+    if (this.toHelper) {
+      this.toHelper = false;
+      document.getElementById('helper')?.scrollIntoView({ block: 'start' });
+    } else {
+      this.startView?.focus();
+    }
+  }
+
+  /** Forward to a result (or "Open result"): shown from memory as it was left. */
+  private showLast(id: number): void {
+    const last = this.last;
+    if (!last || last.id !== id) {
+      // Its result is gone (a newer survey replaced it); a survey still stopping keeps its entry.
+      if (!(this.running && this.runningId === id)) this.nav.forget();
+      this.showHome();
+      return;
+    }
+    if (this.running && this.runningId !== id) this.cancelRunning();
+    this.token++;
+    this.source = last.source;
+    this.showResults(last.tree, last.state, true);
+  }
+
+  /** "Open result" on the start page. */
+  private readonly openLast = (): void => {
+    if (!this.last) return;
+    this.nav.enter(this.last.id);
+    this.showLast(this.last.id);
+  };
+
+  /** The results view's state, kept with the last result when its view goes away. */
+  private keepResultState(): void {
+    const view = this.resultsView;
+    if (view && this.last && view.tree === this.last.tree) this.last.state = view.snapshot();
+  }
+
+  private lastInfo(): LastResultInfo | null {
+    const last = this.last;
+    if (!last) return null;
+    const { tree } = last;
+    return { name: displayName(tree, tree.root), bytes: tree.size(tree.root), at: last.at, complete: tree.meta.complete, demo: tree.meta.source === 'demo' };
+  }
+
+  /** A survey or result `id` starts: its history entry, and the result now on screen kept. */
+  private beginResult(): { token: number; id: number } {
+    this.keepResultState();
+    this.detached = false;
+    const id = ++this.resultSeq;
+    this.nav.enter(id);
+    return { token: ++this.token, id };
+  }
+
+  /** A survey finished (or was stopped): its result is the last one; shown unless the user went home meanwhile. */
+  private finishResult(id: number, tree: ScanTree): void {
+    this.last = { id, tree, source: this.source, at: Date.now() };
+    if (this.detached) {
+      this.detached = false;
+      this.startView?.setLast(this.lastInfo());
+      return;
+    }
+    this.showResults(tree);
   }
 
   // ---------- flows ----------
@@ -235,8 +368,8 @@ export class App {
       this.surveyWithHelper(path);
     } else {
       // The start page's helper section shows what is wrong and how to fix it.
-      this.showStart();
-      document.getElementById('helper')?.scrollIntoView({ block: 'start' });
+      this.toHelper = true;
+      this.goHome();
     }
   }
 
@@ -253,7 +386,7 @@ export class App {
 
   private run(name: string, startScan: (onProgress: (p: ScanProgress) => void) => RunningScan): Promise<void> {
     this.cancelRunning();
-    const token = ++this.token;
+    const { token, id } = this.beginResult();
     const showScan = (resume?: ScanViewState) => {
       const view = new ScanView({ name, mode: 'scan', onCancel: () => this.running?.cancel(), resume });
       this.show('scan', view, `${t.app.titleScan(name)} – ${APP_NAME}`, { rerender: () => showScan(this.scanView?.state) });
@@ -270,16 +403,19 @@ export class App {
       return Promise.resolve();
     }
     this.running = scan;
+    this.runningId = id;
     return scan.result.then(
       (tree) => {
         if (token !== this.token) return;
         this.running = null;
-        this.showResults(tree);
+        this.finishResult(id, tree);
       },
       (error: unknown) => {
         if (token !== this.token) return;
         this.running = null;
-        this.showError(error);
+        // Gone to the start page meanwhile: the error has nothing to show there.
+        if (this.detached) this.detached = false;
+        else this.showError(error);
       },
     );
   }
@@ -289,7 +425,7 @@ export class App {
     if (!files) return;
     this.cancelRunning();
     this.source = { kind: 'files' };
-    const token = ++this.token;
+    const { token, id } = this.beginResult();
     const name = files.length > 0 ? files[0].webkitRelativePath.split('/')[0] || t.app.folder : t.app.folder;
     let bytes = 0;
     for (let k = 0; k < files.length; k++) bytes += files[k].size;
@@ -305,7 +441,7 @@ export class App {
       window.setTimeout(() => {
         if (token !== this.token) return;
         try {
-          this.showResults(treeFromFiles(files, t.app.emptyFolder));
+          this.finishResult(id, treeFromFiles(files, t.app.emptyFolder));
         } catch (error) {
           this.showError(error);
         }
@@ -322,13 +458,16 @@ export class App {
 
   private showStart(knowOpen = false): void {
     const helper = this.helper ? { link: this.helper, onSurvey: this.surveyWithHelper } : null;
-    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen, helper });
+    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen, helper, last: this.lastInfo(), onOpenLast: this.openLast });
     this.show('start', view, `${APP_NAME} – ${t.app.titleStart}`, { rerender: () => this.showStart(this.startView?.knowOpen) });
     this.startView = view;
   }
 
-  /** `restore`: the state of the view this one replaces (language switch, an item recycled). */
-  private showResults(tree: ScanTree, restore?: ResultsState): void {
+  /**
+   * `restore`: the state of the view this one replaces (language switch, an item recycled),
+   * or of the last result brought back (`focusView`: then the view gets the focus as new).
+   */
+  private showResults(tree: ScanTree, restore?: ResultsState, focusView = !restore): void {
     // Offer the administrator restart only for helper scans without it, while the helper is connected.
     const canElevate = tree.meta.source === 'helper' && tree.meta.helper?.elevated === false && !!this.helper?.client && this.source?.kind === 'helper';
     // Clean-up actions: helper scans only; the scan says which actions its helper offered.
@@ -337,18 +476,20 @@ export class App {
         ? new Cleanup({
             tree,
             link: this.helper,
-            onRecycled: (entry) => this.recycled(tree, entry),
+            onRemoved: (entry, how) => this.removed(tree, entry, how),
+            onPartial: (entry) => this.partlyDeleted(tree, entry),
             onRescan: this.rescan,
             fallbackFocus: () => this.resultsView?.el.querySelector<HTMLElement>('.ftree__scroller') ?? null,
           })
         : null;
-    // A helper without either action (an older one, or not on Windows): no empty action columns.
-    if (cleanup && !cleanup.offers('reveal') && !cleanup.offers('recycle')) cleanup = null;
+    // A helper without any action (an older one, or not on Windows): no empty action columns.
+    if (cleanup && !cleanup.offers('reveal') && !cleanup.offers('recycle') && !cleanup.offers('delete')) cleanup = null;
     const view = new ResultsView({
       tree,
       theme: this.theme,
       onRescan: this.source ? this.rescan : null,
       onOtherFolder: this.pick,
+      onHome: this.goHome,
       onElevate: canElevate ? this.elevateAndRescan : null,
       cleanup,
       restore,
@@ -359,11 +500,11 @@ export class App {
       rerender: () => this.showResults(tree, this.resultsView?.snapshot()),
     });
     this.resultsView = view;
-    if (!restore) view.focus();
+    if (focusView) view.focus();
   }
 
-  /** An item is in the Recycle Bin now: take it out of the results everywhere, keep the place. */
-  private recycled(tree: ScanTree, entry: number): void {
+  /** An item is in the Recycle Bin now, or deleted: take it out of the results everywhere, keep the place. */
+  private removed(tree: ScanTree, entry: number, how: CleanupMode): void {
     const view = this.resultsView;
     if (!view || view.tree !== tree) return;
     const name = displayName(tree, entry);
@@ -382,7 +523,24 @@ export class App {
     }
     if (fromPanel) this.resultsView?.focusPanel();
     else this.resultsView?.focusTree();
-    toast(t.cleanup.done(name, size), 'trash', 8000);
+    toast(how === 'permanent' ? t.cleanup.deleted(name, size) : t.cleanup.done(name, size), how === 'permanent' ? 'trashX' : 'trash', 8000);
+  }
+
+  /**
+   * A folder was deleted only in part: it stays with its scanned numbers (which of its entries
+   * are gone is unknown), marked in the tree, and a note says the numbers may be off.
+   */
+  private partlyDeleted(tree: ScanTree, entry: number): void {
+    const view = this.resultsView;
+    if (!view || view.tree !== tree) return;
+    tree.markPartial(entry);
+    const state = view.snapshot();
+    this.relocalizing = true;
+    try {
+      this.showResults(tree, state);
+    } finally {
+      this.relocalizing = false;
+    }
   }
 
   private showError(error: unknown): void {
@@ -405,7 +563,7 @@ export class App {
       message,
       detail,
       primary: this.source ? { label: t.errors.retry, action: this.rescan } : undefined,
-      secondary: fromHelper ? { label: t.errors.backToStart, action: () => this.showStart() } : { label: t.errors.otherFolder, action: this.pick },
+      secondary: fromHelper ? { label: t.errors.backToStart, action: this.goHome } : { label: t.errors.otherFolder, action: this.pick },
     });
     const relocalizing = this.relocalizing;
     this.show('notice', view, `${t.app.titleError} – ${APP_NAME}`, { rerender: () => this.showError(error) });

@@ -2,7 +2,7 @@
 
 The DiskAtlas Helper is a small Windows program without a window. It lets the website survey what the browser can't open: whole drives such as `C:\`, system folders, and the space files take up on disk.
 
-Scanning only reads. The helper changes files in exactly one case: when the user confirms on the website that an item should go to the Recycle Bin (see `/v1/recycle`). It never deletes anything permanently by itself.
+Scanning only reads. The helper changes files only after the user has confirmed it on the website. Then it either moves items to the Recycle Bin (`/v1/recycle`) or, when the user explicitly chose "Delete permanently" and confirmed that again, deletes them for good (`/v1/delete`). It never decides on its own to delete permanently.
 
 The website talks to it over HTTP on the loopback interface. This document is the contract between the two sides: `helper/` (Go) and `src/core/helper*.ts` (TypeScript).
 
@@ -22,10 +22,25 @@ The helper still answers `OPTIONS` (see below), so other clients and later versi
 
 ## Security
 
-Every request, `OPTIONS` included, passes these checks before anything else happens:
+**Same user** (checked once per TCP connection, when it is accepted): the program on the other end must run as the same Windows user as the helper.
+
+- The helper finds that program from the client's port in the system TCP table (`GetExtendedTcpTable`), then reads its process token.
+- If the user doesn't match, or the program can't be identified, the connection is closed before any request is read.
+- Loopback ports are shared by every user on a PC, so without this check another user, for example in a second Remote Desktop session, could reach the helper.
+
+After that, every request, `OPTIONS` included, passes these checks before anything else happens:
 
 1. **Host**: must be `127.0.0.1:<port>` or `localhost:<port>` for the port the helper listens on. Anything else gets `403` with no CORS headers. This blocks DNS rebinding.
 2. **Origin**: must be present and exactly equal (scheme, host and port) to an allowed origin. Anything else, including a missing Origin, gets `403` with no CORS headers. Because browsers always send `Origin` on cross-origin requests, this also stops other websites from triggering side effects with simple POSTs.
+
+The Origin check only protects against other websites. A program on the same PC can send any Origin it likes. That is why changes never run with administrator rights. When the helper is elevated, `/v1/recycle` and `/v1/delete` run with the user's normal rights. Checks and changes run on one thread that impersonates the user's real unelevated token:
+
+- Windows hands out the linked token (`TokenLinkedToken`) only at identification level, so the helper uses it just to find the user's normal logon session.
+- In that session it copies the token of a program the user runs normally, trying Explorer first. It accepts only a token of the same user that is unelevated, unrestricted, not an AppContainer and at medium integrity.
+- Before each item the helper checks that the thread really impersonates an unelevated token. If it can't set this up, every item gets `failed` with "could not drop administrator rights".
+- An elevated helper without a linked token, which happens with UAC turned off or on the built-in Administrator account, runs changes as they are, because that user has no lesser rights.
+
+So another program of the same user can't use an elevated helper to delete more than it could itself. If a standard user approves the UAC prompt with another account's password, the elevated helper runs as that account, and the same-user check then refuses the user's browser. Elevation only helps reading. What remains: while the helper runs elevated, such a program could ask it for listings of folders it couldn't open itself (names, sizes, dates; never contents). The website therefore recommends quitting the elevated helper when you're done.
 
 Allowed origins:
 
@@ -81,7 +96,7 @@ Any 4xx or 5xx response from an allowed origin has this JSON body:
   "elevated": false,
   "pid": 4242,
   "idleTimeoutSeconds": 600,
-  "features": ["scan", "reveal", "recycle"]
+  "features": ["scan", "reveal", "recycle", "delete"]
 }
 ```
 
@@ -224,6 +239,55 @@ On systems other than Windows, `features` is `["scan"]` and both endpoints are u
 - `FOF_ALLOWUNDO` sends items to the Recycle Bin.
 - If Windows would have to delete an item permanently anyway, for example because it is too big for the Recycle Bin, `FOF_WANTNUKEWARNING` makes Windows ask the user first. If the user says no, nothing happens and the status is `failed`, with a message saying so.
 - Items are handled one at a time, so a failure doesn't affect the others.
+
+### `POST /v1/delete`
+
+Deletes items permanently, without the Recycle Bin. The website calls this only after the user has chosen "Delete permanently" and confirmed that it can't be undone.
+
+Request body: like `/v1/recycle`, plus `"confirm": "permanent"`:
+
+```json
+{
+  "items": [ { "path": "D:\\Old\\Backup", "isDir": true } ],
+  "dryRun": false,
+  "confirm": "permanent"
+}
+```
+
+`confirm` must be exactly `"permanent"` unless `dryRun` is `true`; otherwise the response is `400 bad_request`. Malformed requests get `400`, as for `/v1/recycle`.
+
+**Checks:** the same as `/v1/recycle`, in the same order, with the same statuses, protected locations and link rules, with two differences under `unsupported`:
+
+- local removable drives are allowed as well as fixed ones (network and SUBST drives stay `unsupported`);
+- long paths are allowed, because the deletion uses `\\?\` paths and not the shell.
+
+**Deleting:**
+
+- **A file:** clear its read-only attribute if it is set, then `DeleteFileW`.
+- **A folder:** depth first, listing with `FindFirstFileExW` as the scan does.
+  - **Links inside it** (name-surrogate reparse points) are removed as links: `RemoveDirectoryW` for a folder link, `DeleteFileW` for a file link. **Their targets are never entered.**
+  - Files are deleted as above.
+  - Each folder is removed with `RemoveDirectoryW` once it is empty.
+  - An entry that can't be deleted is left in place, and the deletion goes on with the rest.
+- Cloud placeholders are deleted without being opened, so nothing is downloaded. The sync app then usually deletes them online as well.
+
+Statuses after a real run:
+
+| Status | Meaning |
+| --- | --- |
+| `deleted` | the item is gone; the helper checks this afterwards |
+| `partial` | a folder of which some entries couldn't be deleted; the folder and those entries are still there |
+| `failed` | nothing was deleted, for example because the file is in use |
+
+A dry run gives `ok` or one of the check statuses.
+
+Every result carries `deletedFiles`, `deletedFolders` and `failedEntries` (counts; `0` in a dry run), and `message`. For `partial` and `failed`, the message names the first error.
+
+```json
+{ "results": [ { "path": "D:\\Old\\Backup", "status": "partial", "deletedFiles": 812, "deletedFolders": 40, "failedEntries": 3, "message": "3 entries could not be deleted, first: …\\db.lock: in use by another process" } ] }
+```
+
+The helper logs every real deletion with path, status and counts.
 
 ### `POST /v1/elevate`
 

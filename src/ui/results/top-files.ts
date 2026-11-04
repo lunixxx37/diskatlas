@@ -1,5 +1,5 @@
 import { formatBytes, formatDate, formatPercent, type ScanTree } from '../../core';
-import { entryButtons, type EntryActions } from '../cleanup';
+import { cleanupKey, entryButtons, type EntryActions } from '../cleanup';
 import { h } from '../dom';
 import { displayName, folderBelow, splitPath } from '../format';
 import { t } from '../i18n';
@@ -38,6 +38,12 @@ export class TopFilesPanel {
     this.body.addEventListener('click', (event) => {
       const row = (event.target as Element).closest<HTMLElement>('tr[data-entry]');
       if (row) options.onReveal(Number(row.dataset.entry));
+    });
+    // Delete / Shift+Delete on a file's name: the clean-up dialog for it.
+    this.body.addEventListener('keydown', (event) => {
+      const target = event.target as Element;
+      const row = target.closest<HTMLElement>('tr[data-entry]');
+      if (row && target.closest('.cell-name__button')) cleanupKey(options.actions, event, Number(row.dataset.entry), target as HTMLElement);
     });
   }
 

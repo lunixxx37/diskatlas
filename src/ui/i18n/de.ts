@@ -16,6 +16,8 @@ export const de: Messages = {
     noName: '(ohne Namen)',
     folder: 'Ordner',
     emptyFolder: 'Leerer Ordner',
+    wordmarkLabel: 'DiskAtlas: Startseite',
+    homeStopped: 'Die Vermessung wurde angehalten. Was bis dahin gelesen war, bleibt als letztes Ergebnis erhalten.',
   },
 
   errors: {
@@ -56,6 +58,13 @@ export const de: Messages = {
   },
 
   start: {
+    last: {
+      title: 'Letzte Vermessung',
+      open: 'Ergebnis öffnen',
+      incomplete: 'unvollständig',
+      demo: 'Beispieldaten',
+      justNow: 'gerade eben',
+    },
     eyebrow: 'Speicher-Vermessung im Browser',
     title: 'Sieh nach, was deinen Speicher füllt.',
     lede: (app) => `Wähle einen Ordner oder ein Laufwerk. ${app} vermisst ihn direkt in deinem Browser, nichts wird hochgeladen.`,
@@ -104,7 +113,7 @@ export const de: Messages = {
       [
         'Was der Browser blockiert, liest der ',
         { b: 'DiskAtlas Helper' },
-        ' für Windows: ganze Laufwerke wie C:, Systemordner und den Platz, den Dateien auf dem Datenträger belegen. Beim Vermessen liest er nur; in den Papierkorb verschiebt er etwas erst, nachdem du es auf dieser Seite bestätigt hast.',
+        ' für Windows: ganze Laufwerke wie C:, Systemordner und den Platz, den Dateien auf dem Datenträger belegen. Beim Vermessen liest er nur. Löschen kann er etwas erst, nachdem du es auf dieser Seite bestätigt hast: in den Papierkorb oder, wenn du das ausdrücklich wählst, endgültig.',
       ],
     ],
   },
@@ -112,7 +121,7 @@ export const de: Messages = {
   helper: {
     eyebrow: 'DiskAtlas Helper für Windows',
     title: 'Ganze Laufwerke und Systemordner',
-    lede: 'C:\\ und Systemordner kann der Browser nicht öffnen. Der DiskAtlas Helper kann es: ein kleines Programm ohne Fenster. Beim Vermessen liest er nur. Etwas löschen kann er nur nach deiner Bestätigung auf dieser Seite, und dann nur in den Papierkorb. Er beendet sich selbst, wenn er nicht gebraucht wird.',
+    lede: 'C:\\ und Systemordner kann der Browser nicht öffnen. Der DiskAtlas Helper kann es: ein kleines Programm ohne Fenster. Beim Vermessen liest er nur. Löschen kann er etwas erst nach deiner Bestätigung auf dieser Seite: in den Papierkorb oder, wenn du das ausdrücklich wählst, endgültig. Er beendet sich selbst, wenn er nicht gebraucht wird.',
     connect: 'Helper verbinden',
     permissionNote: 'Dein Browser fragt dann, ob diese Seite auf Apps auf deinem Gerät zugreifen darf („Loopback-Netzwerk“). Erlaube es, damit die Seite den Helper erreicht.',
     quitNote: 'Der Helper wurde beendet.',
@@ -149,6 +158,7 @@ export const de: Messages = {
     declined: 'Der Helper läuft ohne Administratorrechte weiter.',
     elevateFailed: 'Der Helper ist nicht als Administrator zurückgekommen.',
     quit: 'Helper beenden',
+    quitElevated: 'Als Administrator kann der Helper auch geschützte Ordner auflisten. Beende ihn, wenn du fertig bist.',
     drives: 'Laufwerke',
     loadingDrives: 'Laufwerke werden gelesen …',
     drivesFailed: 'Die Liste der Laufwerke ließ sich nicht lesen.',
@@ -217,6 +227,11 @@ export const de: Messages = {
   },
 
   results: {
+    home: 'Startseite',
+    homeTitle: 'Zurück zur Startseite. Dieses Ergebnis bleibt dort verfügbar.',
+    partialTitle: 'Nur zum Teil gelöscht. ',
+    partialText: (names) => `In ${names} ließ sich nicht alles löschen. Die Zahlen hier können bis zur nächsten Vermessung abweichen.`,
+    quoted: (name) => `„${name}“`,
     heading: (name) => `Ergebnis für ${name}`,
     chipIncomplete: 'Unvollständig',
     chipDemo: 'Beispieldaten',
@@ -323,6 +338,7 @@ export const de: Messages = {
   },
 
   flags: {
+    partial: 'Nur zum Teil gelöscht: Die Zahlen können abweichen',
     unreadableFolder: 'Kein Zugriff – der Browser durfte diesen Ordner nicht lesen',
     unreadableFile: 'Kein Zugriff – der Browser durfte diese Datei nicht lesen',
     tooDeep: 'Zu tief verschachtelt, nicht geöffnet',
@@ -442,6 +458,35 @@ export const de: Messages = {
     done: (name, size) => `„${name}“ (${size}) liegt jetzt im Papierkorb. Von dort lässt es sich wiederherstellen.`,
     menu: 'Aktionen',
     copyPath: 'Pfad kopieren',
+    deletePermanently: 'Endgültig löschen',
+    deleteItem: (name) => `${name} endgültig löschen`,
+    mode: 'Was soll passieren?',
+    titlePermanent: 'Endgültig löschen?',
+    ledePermanent: 'Das lässt sich nicht rückgängig machen. Nichts landet im Papierkorb: Es ist endgültig weg.',
+    folderNotePermanent: (files) => `Alles darin wird mit gelöscht: ${files}.`,
+    cloudPermanent: 'Das liegt nur online in OneDrive. Löschst du es hier, löscht OneDrive es meist auch in der Cloud.',
+    cloudInsidePermanent: 'Einige Dateien in diesem Ordner liegen nur online in OneDrive. Löschst du sie hier, löscht OneDrive sie meist auch in der Cloud.',
+    understand: 'Mir ist klar, dass das nicht rückgängig zu machen ist',
+    readyPermanent: 'Der Helper kann es endgültig löschen.',
+    workingPermanent: 'Wird gelöscht …',
+    failedPermanent: 'Es wurde nichts gelöscht.',
+    blockedPermanent: 'Der Helper konnte es nicht prüfen, deshalb lässt es sich nicht löschen.',
+    close: 'Schließen',
+    normalRights: 'Gelöscht wird mit deinen normalen Rechten, nicht mit Administratorrechten.',
+    deniedFailed: 'Windows hat den Zugriff verweigert. Der Helper verschiebt und löscht nur mit deinen normalen Rechten, und dafür braucht es Administratorrechte.',
+    refusedPermanent: {
+      protected:
+        'Das lässt sich nicht löschen: Es ist geschützt. Dazu gehören Laufwerkswurzeln und Systemdateien wie pagefile.sys, die Windows- und Programmordner, der Papierkorb, Benutzerprofile und Ordner wie Dokumente selbst sowie der Ordner des Helpers.',
+      unsupported: 'Der Helper kann das nicht sicher löschen, zum Beispiel auf einem Netz- oder SUBST-Laufwerk, über eine Verknüpfung oder bei einem Namen, den Windows anders liest.',
+    },
+    partial: (gone, left) => `Nur zum Teil gelöscht. Weg: ${gone}. Noch da: ${left}.`,
+    partialHint: 'Die Zahlen hier können bis zur nächsten Vermessung abweichen.',
+    goneCounts: (files, folders) => `${files} und ${folders}`,
+    folders: { one: '# Ordner', other: '# Ordner' },
+    entries: { one: '# Eintrag', other: '# Einträge' },
+    instead: 'In den Papierkorb kann Windows das hier nicht legen, aber der Helper kann es endgültig löschen.',
+    insteadButton: 'Stattdessen endgültig löschen…',
+    deleted: (name, size) => `„${name}“ (${size}) ist endgültig gelöscht.`,
   },
 
   dupes: {

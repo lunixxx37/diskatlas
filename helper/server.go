@@ -78,9 +78,10 @@ type serverConfig struct {
 	workers     int
 	elevateArgs []string     // arguments for the elevated instance
 	exit        func(string) // asks the helper to shut down, with a reason for the log
-	// recycle and reveal are the clean-up actions; nil where the system has
-	// none (then /v1/info doesn't list them and their endpoints are unknown).
-	recycle recycleSystem
+	// cleanup (recycle and delete) and reveal are the clean-up actions; nil
+	// where the system has none (then /v1/info doesn't list them and their
+	// endpoints are unknown).
+	cleanup cleanupSystem
 	reveal  func(path string) error
 }
 
@@ -97,8 +98,9 @@ type server struct {
 	nextID int
 	cur    *scan // the only scan; nil before the first one
 
-	elevateMu sync.Mutex
-	recycleMu sync.Mutex // one recycle request at a time
+	elevateMu   sync.Mutex
+	cleanupMu   sync.Mutex   // one recycle or delete request at a time
+	cleanupBusy atomic.Int32 // recycle or delete requests running or waiting
 }
 
 func newServer(cfg serverConfig) *server {
@@ -229,8 +231,10 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		s.handleCancel(w, r, seg[1])
 	case len(seg) == 1 && seg[0] == "reveal" && post && s.reveal != nil:
 		s.handleReveal(w, r)
-	case len(seg) == 1 && seg[0] == "recycle" && post && s.recycle != nil:
+	case len(seg) == 1 && seg[0] == "recycle" && post && s.cleanup != nil:
 		s.handleRecycle(w, r)
+	case len(seg) == 1 && seg[0] == "delete" && post && s.cleanup != nil:
+		s.handleDelete(w, r)
 	case len(seg) == 1 && seg[0] == "elevate" && post:
 		s.handleElevate(w, r)
 	case len(seg) == 1 && seg[0] == "shutdown" && post:
@@ -278,8 +282,8 @@ func (s *server) features() []string {
 	if s.reveal != nil {
 		f = append(f, "reveal")
 	}
-	if s.recycle != nil {
-		f = append(f, "recycle")
+	if s.cleanup != nil {
+		f = append(f, "recycle", "delete")
 	}
 	return f
 }
@@ -314,8 +318,57 @@ func (s *server) handleReveal(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// cleanupItemsError checks the items of a recycle or delete request; "" if
+// they are fine.
+func cleanupItemsError(items []recycleItem) string {
+	if n := len(items); n < 1 || n > maxRecycleItems {
+		return fmt.Sprintf("items must hold 1 to %d entries, not %d", maxRecycleItems, n)
+	}
+	for i, it := range items {
+		if it.IsDir == nil || (!*it.IsDir && (it.Size == nil || it.Mtime == nil)) {
+			return fmt.Sprintf("item %d needs isDir, and for a file also size and mtime", i)
+		}
+	}
+	return ""
+}
+
+// runCleanup runs one recycle or delete request off the HTTP goroutine, one
+// at a time. The work goes on to the end even if the website stops waiting
+// (it logs its own results), and the helper doesn't exit while it runs. It
+// returns false if the website went away first.
+func (s *server) runCleanup(r *http.Request, work func()) bool {
+	s.cleanupBusy.Add(1)
+	done := make(chan struct{})
+	go func() {
+		defer s.cleanupBusy.Add(-1)
+		defer close(done)
+		s.cleanupMu.Lock()
+		defer s.cleanupMu.Unlock()
+		work()
+	}()
+	select {
+	case <-done:
+		return true
+	case <-r.Context().Done():
+		return false
+	}
+}
+
+// waitCleanup waits until no recycle or delete runs any more, at most for
+// timeout, so the helper doesn't exit in the middle of one.
+func (s *server) waitCleanup(timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for s.cleanupBusy.Load() > 0 {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
 // handleRecycle checks items and moves those that pass to the Recycle Bin
-// (docs/helper-protocol.md, POST /v1/recycle). Requests run one at a time.
+// (docs/helper-protocol.md, POST /v1/recycle).
 func (s *server) handleRecycle(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Items  []recycleItem `json:"items"`
@@ -324,63 +377,123 @@ func (s *server) handleRecycle(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	if n := len(req.Items); n < 1 || n > maxRecycleItems {
-		writeError(w, http.StatusBadRequest, codeBadRequest, fmt.Sprintf("items must hold 1 to %d entries, not %d", maxRecycleItems, n))
+	if msg := cleanupItemsError(req.Items); msg != "" {
+		writeError(w, http.StatusBadRequest, codeBadRequest, msg)
 		return
 	}
-	for i, it := range req.Items {
-		if it.IsDir == nil || (!*it.IsDir && (it.Size == nil || it.Mtime == nil)) {
-			writeError(w, http.StatusBadRequest, codeBadRequest, fmt.Sprintf("item %d needs isDir, and for a file also size and mtime", i))
+	var results []recycleResult
+	var err error
+	if !s.runCleanup(r, func() {
+		var dropErr error
+		results, err, dropErr = recycleAsUser(s.cleanup, req.Items, req.DryRun)
+		if dropErr != nil {
+			s.logger.Printf("error: recycle refused: %v", dropErr)
+		}
+		if err != nil {
+			s.logger.Printf("error: recycle: %v", err)
 			return
 		}
+		s.logCleanup("recycle", req.Items, req.DryRun, len(results), func(i int) (string, string) {
+			return results[i].Status, results[i].Message
+		})
+	}) {
+		return
 	}
-	s.recycleMu.Lock()
-	defer s.recycleMu.Unlock()
-	results, err := runRecycle(s.recycle, req.Items, req.DryRun)
 	if err != nil {
-		s.logger.Printf("error: recycle: %v", err)
 		writeError(w, http.StatusInternalServerError, codeInternal, err.Error())
 		return
 	}
-	s.logRecycle(req.Items, results, req.DryRun)
 	writeJSON(w, http.StatusOK, struct {
 		Results []recycleResult `json:"results"`
 	}{results})
 }
 
-// logRecycle logs every item of a real recycle with its path, status and
-// size; the user picked these paths. A dry run gets one line of counts.
-func (s *server) logRecycle(items []recycleItem, results []recycleResult, dryRun bool) {
+// handleDelete checks items like handleRecycle and deletes those that pass
+// permanently (docs/helper-protocol.md, POST /v1/delete). Unless it is a dry
+// run, the request must say confirm: "permanent".
+func (s *server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Items   []recycleItem `json:"items"`
+		DryRun  bool          `json:"dryRun"`
+		Confirm *string       `json:"confirm"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if msg := cleanupItemsError(req.Items); msg != "" {
+		writeError(w, http.StatusBadRequest, codeBadRequest, msg)
+		return
+	}
+	if !req.DryRun && (req.Confirm == nil || *req.Confirm != confirmPermanent) {
+		writeError(w, http.StatusBadRequest, codeBadRequest, `deleting permanently needs "confirm": "permanent"`)
+		return
+	}
+	var results []deleteResult
+	var err error
+	if !s.runCleanup(r, func() {
+		var dropErr error
+		results, err, dropErr = deleteAsUser(s.cleanup, req.Items, req.DryRun)
+		if dropErr != nil {
+			s.logger.Printf("error: delete refused: %v", dropErr)
+		}
+		if err != nil {
+			s.logger.Printf("error: delete: %v", err)
+			return
+		}
+		s.logCleanup("delete", req.Items, req.DryRun, len(results), func(i int) (string, string) {
+			res := results[i]
+			counts := fmt.Sprintf("%d files and %d folders deleted, %d failed", res.DeletedFiles, res.DeletedFolders, res.FailedEntries)
+			if res.Message != "" {
+				counts += ": " + res.Message
+			}
+			return res.Status, counts
+		})
+	}) {
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, codeInternal, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Results []deleteResult `json:"results"`
+	}{results})
+}
+
+// logCleanup logs every item of a real recycle or delete with its path,
+// status and size or counts; the user picked these paths. A dry run gets
+// one line of counts per status.
+func (s *server) logCleanup(action string, items []recycleItem, dryRun bool, n int, result func(int) (status, detail string)) {
 	if dryRun {
 		counts := map[string]int{}
 		var order []string
-		for _, r := range results {
-			if counts[r.Status] == 0 {
-				order = append(order, r.Status)
+		for i := range n {
+			st, _ := result(i)
+			if counts[st] == 0 {
+				order = append(order, st)
 			}
-			counts[r.Status]++
+			counts[st]++
 		}
 		parts := make([]string, len(order))
 		for i, st := range order {
 			parts[i] = fmt.Sprintf("%d %s", counts[st], st)
 		}
-		s.logger.Printf("recycle check (dry run): %s", strings.Join(parts, ", "))
+		s.logger.Printf("%s check (dry run): %s", action, strings.Join(parts, ", "))
 		return
 	}
-	for i, r := range results {
+	for i := range n {
 		what := "file"
 		if *items[i].IsDir {
 			what = "folder"
 		}
-		size := ""
 		if items[i].Size != nil {
-			size = fmt.Sprintf(", %.0f bytes", *items[i].Size)
+			what += fmt.Sprintf(", %.0f bytes", *items[i].Size)
 		}
-		msg := ""
-		if r.Message != "" {
-			msg = ": " + r.Message
+		st, detail := result(i)
+		if detail != "" {
+			detail = ": " + detail
 		}
-		s.logger.Printf("recycle %s (%s%s): %s%s", r.Path, what, size, r.Status, msg)
+		s.logger.Printf("%s %s (%s): %s%s", action, items[i].Path, what, st, detail)
 	}
 }
 
@@ -596,7 +709,7 @@ func (s *server) exitAfter(w http.ResponseWriter, reason string) {
 // idleExpired reports whether the helper has been idle long enough to exit:
 // no request for the idle time while no scan was running.
 func (s *server) idleExpired(now time.Time) bool {
-	if s.idle <= 0 || s.inFlight.Load() > 0 || s.scanRunning() {
+	if s.idle <= 0 || s.inFlight.Load() > 0 || s.cleanupBusy.Load() > 0 || s.scanRunning() {
 		return false
 	}
 	return now.Sub(time.Unix(0, s.activity.Load())) >= s.idle

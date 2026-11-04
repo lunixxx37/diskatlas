@@ -5,6 +5,7 @@ import type { HelperLink } from './helper-link';
 import { HelperPanel } from './helper-panel';
 import { t } from './i18n';
 import { icon } from './icons';
+import { LastResultCard, type LastResultInfo } from './last-result';
 
 /** What this browser can do: open folders directly, take a folder's files, or neither. */
 export type Support = 'picker' | 'files' | 'none';
@@ -17,6 +18,9 @@ export interface StartViewOptions {
   knowOpen?: boolean;
   /** The DiskAtlas Helper section (Windows desktops only). */
   helper?: { link: HelperLink; onSurvey: (path: string, id: string) => void } | null;
+  /** The result still in memory, with "Open result". */
+  last?: LastResultInfo | null;
+  onOpenLast?: () => void;
 }
 
 export class StartView {
@@ -26,6 +30,8 @@ export class StartView {
   private readonly idleHint: string;
   private readonly know: HTMLDetailsElement;
   private readonly helper: HelperPanel | null;
+  private lastCard: LastResultCard | null = null;
+  private readonly onOpenLast: (() => void) | null;
 
   constructor(options: StartViewOptions) {
     const { support } = options;
@@ -80,6 +86,33 @@ export class StartView {
       this.know,
     );
     intro.querySelector('h1')!.id = 'start-title';
+    this.onOpenLast = options.onOpenLast ?? null;
+    if (options.last) this.setLast(options.last);
+  }
+
+  /** Shows (or updates, or with null removes) the card for the result still in memory. */
+  setLast(info: LastResultInfo | null): void {
+    if (!info || !this.onOpenLast) {
+      this.lastCard?.destroy();
+      this.lastCard?.el.remove();
+      this.lastCard = null;
+      return;
+    }
+    if (this.lastCard) this.lastCard.update(info);
+    else {
+      this.lastCard = new LastResultCard(info, this.onOpenLast);
+      this.el.prepend(this.lastCard.el);
+    }
+  }
+
+  /** Keyboard focus to the page's heading (after coming back from a result). */
+  focus(): void {
+    this.el.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
+  }
+
+  /** The card's button, for focus after coming back (null without a card). */
+  get lastButton(): HTMLElement | null {
+    return this.lastCard?.el.querySelector<HTMLElement>('.last__open') ?? null;
   }
 
   get knowOpen(): boolean {
@@ -94,6 +127,7 @@ export class StartView {
 
   destroy(): void {
     this.helper?.destroy();
+    this.lastCard?.destroy();
   }
 }
 

@@ -11,7 +11,7 @@
 - **Largest files**, **file types** by category and extension, and **file age**
 - **Possible duplicates**: files with the same name and size, grouped by the space you could free
 - **CSV export** of folders and files
-- **Read-only in the browser**: the website never changes anything. With the helper you can also show items in Explorer and move them to the Recycle Bin, always after confirming
+- **Read-only in the browser**: the website never changes anything. With the helper you can also show items in Explorer and move them to the Recycle Bin or delete them permanently, always after confirming
 - Light and dark theme, English and German
 - An example drive to try it without picking a folder
 
@@ -32,7 +32,7 @@ Browsers protect some system locations and won't open them, for example the root
 
 An optional small program for what the browser can't open: whole drives such as `C:\` and system folders. It has no window and closes itself when it hasn't been used for a while. With it, DiskAtlas also shows the size on disk and marks links and OneDrive online-only files. Restarted as administrator, it can read protected folders too.
 
-Scanning only reads. The helper moves an item to the Recycle Bin only after you confirm it on the website, refuses system locations, and never deletes anything permanently by itself.
+Scanning only reads. The helper changes something only after you confirm it on the website: it moves an item to the Recycle Bin, or deletes it permanently if you explicitly choose that and confirm again. It always refuses system locations and never follows links while deleting.
 
 The helper listens only on `127.0.0.1` (ports 41417–41419) and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
 

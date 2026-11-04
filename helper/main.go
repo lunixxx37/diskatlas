@@ -132,6 +132,12 @@ func serve(opts options, logger *log.Logger) int {
 		return 1
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
+	// Only programs of the helper's own user may connect.
+	owners, self := platformOwners(), selfSID()
+	if owners != nil && self == "" {
+		logger.Printf("error: the helper's own user is unknown, so every connection will be refused")
+	}
+	ln = requireSameUser(ln, owners, self, logger)
 
 	if mode != modeServe {
 		if err := registerLink(opts); err != nil {
@@ -157,7 +163,7 @@ func serve(opts options, logger *log.Logger) int {
 		idle:        opts.idle,
 		logger:      logger,
 		elevateArgs: elevatedArgs(opts, port),
-		recycle:     platformRecycle(),
+		cleanup:     platformCleanup(),
 		reveal:      platformReveal(),
 		exit: func(reason string) {
 			select {
@@ -200,6 +206,10 @@ func serve(opts options, logger *log.Logger) int {
 		httpSrv.Close()
 	}
 	cancel()
+	// A deletion the user confirmed is finished rather than cut off.
+	if !srv.waitCleanup(2 * time.Minute) {
+		logger.Printf("error: stopping while a recycle or delete is still running")
+	}
 	logger.Printf("stop: %s", reason)
 	return 0
 }

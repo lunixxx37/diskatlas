@@ -85,6 +85,33 @@
   height: 20px;
 }
 
+/* The wordmark is the link to the start page. */
+a.wordmark {
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+a.wordmark:hover {
+  background: var(--panel-2);
+}
+
+a.wordmark:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Between "Start page" (navigation) and the actions on this result. */
+.topbar__divider {
+  flex: none;
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: var(--line-strong);
+}
+
 .topbar__context {
   display: flex;
   align-items: center;
@@ -172,6 +199,17 @@
   }
   .app[data-view="results"] .seg-switch label {
     padding: 0 8px;
+  }
+}
+
+/* "Start page" keeps its label longer than the others: it is how to get back. */
+@media (min-width: 641px) and (max-width: 1239px) {
+  .app[data-view="results"] .topbar .btn__label--home {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
   }
 }
 

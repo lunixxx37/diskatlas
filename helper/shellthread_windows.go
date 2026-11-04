@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -47,6 +48,13 @@ type shellThread struct {
 	err   error
 	jobs  chan func()
 	ready windows.Handle // auto-reset event: a job is waiting
+	tid   atomic.Uint32  // the OS thread's id, once it runs
+}
+
+// isCurrent reports whether the caller runs on the shell thread.
+func (t *shellThread) isCurrent() bool {
+	id := t.tid.Load()
+	return id != 0 && id == windows.GetCurrentThreadId()
 }
 
 var theShell shellThread
@@ -81,6 +89,7 @@ func (t *shellThread) loop(started chan<- error) {
 		started <- fmt.Errorf("could not initialize COM: %w", err)
 		return
 	}
+	t.tid.Store(windows.GetCurrentThreadId())
 	close(started)
 	var m winMsg
 	for {

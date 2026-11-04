@@ -246,6 +246,52 @@ describe('reveal and recycle', () => {
     expect((await failure(new HelperClient(PORT, INFO, page.env).recycle([item], true))).kind).toBe('wrong-server');
   });
 
+  it('deletes permanently only with confirm: "permanent", and checks without it', async () => {
+    const folder = { path: 'X:\\Old\\Backup', isDir: true };
+    const page = fakePage({
+      [url(PORT, '/delete')]: (init) => {
+        const body = JSON.parse(init.body as string);
+        if (!body.dryRun && body.confirm !== 'permanent') return json({ error: { code: 'bad_request', message: 'confirm must be "permanent".' } }, 400);
+        const done = { path: folder.path, status: 'deleted', deletedFiles: 812, deletedFolders: 41, failedEntries: 0, message: '' };
+        return json({ results: [body.dryRun ? { path: folder.path, status: 'ok', deletedFiles: 0, deletedFolders: 0, failedEntries: 0, message: '' } : done] });
+      },
+    });
+    const client = new HelperClient(PORT, INFO, page.env);
+    expect(await client.delete([folder], true)).toEqual([{ path: folder.path, status: 'ok', message: '', deletedFiles: 0, deletedFolders: 0, failedEntries: 0 }]);
+    expect(await client.delete([folder], false)).toEqual([{ path: folder.path, status: 'deleted', message: '', deletedFiles: 812, deletedFolders: 41, failedEntries: 0 }]);
+    const bodies = page.calls.map((c) => JSON.parse(c.init.body as string));
+    expect(bodies).toEqual([
+      { items: [folder], dryRun: true },
+      { items: [folder], dryRun: false, confirm: 'permanent' },
+    ]);
+    expect(page.calls.every((c) => c.init.method === 'POST' && c.init.headers === undefined)).toBe(true);
+  });
+
+  it('passes partial results with their counts through, and missing counts as 0', async () => {
+    const page = fakePage({
+      [url(PORT, '/delete')]: () =>
+        json({
+          results: [
+            { path: 'X:\\A', status: 'partial', deletedFiles: 812, deletedFolders: 40, failedEntries: 3, message: '3 entries could not be deleted, first: …\\db.lock: in use' },
+            { path: 'X:\\B', status: 'failed', message: 'the file is in use' },
+            { path: 'X:\\C', status: 'vanished', deletedFiles: -2, deletedFolders: 'x' },
+          ],
+        }),
+    });
+    const items = ['X:\\A', 'X:\\B', 'X:\\C'].map((path) => ({ path, isDir: true }));
+    const [partial, failed, odd] = await new HelperClient(PORT, INFO, page.env).delete(items, false);
+    expect(partial).toEqual({ path: 'X:\\A', status: 'partial', message: '3 entries could not be deleted, first: …\\db.lock: in use', deletedFiles: 812, deletedFolders: 40, failedEntries: 3 });
+    expect([failed.status, failed.message, failed.deletedFiles, failed.failedEntries]).toEqual(['failed', 'the file is in use', 0, 0]);
+    expect([odd.status, odd.deletedFiles, odd.deletedFolders]).toEqual(['failed', 0, 0]);
+    expect(odd.message).toMatch(/vanished/);
+  });
+
+  it('reports a refused delete request (400) as an error', async () => {
+    const page = fakePage({ [url(PORT, '/delete')]: () => json({ error: { code: 'bad_request', message: 'confirm must be "permanent".' } }, 400) });
+    const error = await failure(new HelperClient(PORT, INFO, page.env).delete([item], false));
+    expect([error.kind, error.code, error.message]).toEqual(['http', 'bad_request', 'confirm must be "permanent".']);
+  });
+
   it('builds exactly clean paths, also below a lower-case drive root', async () => {
     const t = await decodeHere(
       buildHelperResult({ names: ['x:\\Users\\Ann', 'Videos', 'trip.mkv'], parent: [-1, 0, 1], kind: [1, 1, 0], size: [0, 0, 5], mtime: [0, 0, 1730000000000.5] }),

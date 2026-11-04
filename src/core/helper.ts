@@ -28,12 +28,12 @@ export interface HelperInfo {
   elevated: boolean;
   pid: number;
   idleTimeoutSeconds: number;
-  /** What this helper can do: "scan", and in newer versions "reveal" and "recycle". */
+  /** What this helper can do: "scan", and in newer versions "reveal", "recycle" and "delete". */
   features: string[];
 }
 
 /** Optional abilities a helper lists in /v1/info `features`. */
-export type HelperFeature = 'scan' | 'reveal' | 'recycle';
+export type HelperFeature = 'scan' | 'reveal' | 'recycle' | 'delete';
 
 export function hasFeature(info: Pick<HelperInfo, 'features'> | undefined | null, feature: HelperFeature): boolean {
   return !!info && info.features.includes(feature);
@@ -63,6 +63,26 @@ export interface RecycleResult {
   path: string;
   status: RecycleStatus;
   message: string;
+}
+
+/**
+ * The verdict of POST /v1/delete: the same checks as /v1/recycle (`ok` in a dry run), then
+ * `deleted`, `partial` (a folder of which some entries are still there) or `failed`.
+ */
+export type DeleteStatus = 'ok' | 'deleted' | 'partial' | 'failed' | 'invalid' | 'not_found' | 'changed' | 'protected' | 'unsupported';
+
+const DELETE_STATUSES: readonly DeleteStatus[] = ['ok', 'deleted', 'partial', 'failed', 'invalid', 'not_found', 'changed', 'protected', 'unsupported'];
+
+export interface DeleteResult {
+  path: string;
+  status: DeleteStatus;
+  /** For `partial` and `failed`: the first error. */
+  message: string;
+  /** What is gone (0 in a dry run). */
+  deletedFiles: number;
+  deletedFolders: number;
+  /** Entries that could not be deleted and are still there. */
+  failedEntries: number;
 }
 
 /**
@@ -377,6 +397,31 @@ export class HelperClient {
       const status = RECYCLE_STATUSES.includes(v.status as RecycleStatus) ? (v.status as RecycleStatus) : 'failed';
       const message = typeof v.message === 'string' ? v.message : '';
       return { path: typeof v.path === 'string' ? v.path : items[k].path, status, message: status === v.status ? message : message || `Unknown status "${String(v.status)}".` };
+    });
+  }
+
+  /**
+   * Deletes items permanently, without the Recycle Bin, or with `dryRun` only checks them.
+   * Call it for real only after the user chose "Delete permanently" and confirmed that it
+   * can't be undone; the real request carries `confirm: "permanent"`. One result per item.
+   */
+  async delete(items: RecycleItem[], dryRun: boolean): Promise<DeleteResult[]> {
+    const request = dryRun ? { items, dryRun } : { items, dryRun, confirm: 'permanent' };
+    const body = await json<{ results?: unknown }>(await call(this.env, this.port, '/delete', { method: 'POST', body: request }));
+    if (!Array.isArray(body.results) || body.results.length !== items.length) throw new HelperError('wrong-server', 'The delete results do not match the items.');
+    const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0);
+    return body.results.map((r, k): DeleteResult => {
+      const v = (r ?? {}) as Partial<Record<keyof DeleteResult, unknown>>;
+      const status = DELETE_STATUSES.includes(v.status as DeleteStatus) ? (v.status as DeleteStatus) : 'failed';
+      const message = typeof v.message === 'string' ? v.message : '';
+      return {
+        path: typeof v.path === 'string' ? v.path : items[k].path,
+        status,
+        message: status === v.status ? message : message || `Unknown status "${String(v.status)}".`,
+        deletedFiles: count(v.deletedFiles),
+        deletedFolders: count(v.deletedFolders),
+        failedEntries: count(v.failedEntries),
+      };
     });
   }
 

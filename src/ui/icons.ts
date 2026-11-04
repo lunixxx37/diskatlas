@@ -47,6 +47,9 @@ const PATHS = {
   power: ['M12 3.5v8', 'M7.4 6.4a7 7 0 1 0 9.2 0'],
   trash: ['M4.5 7h15', 'M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2', 'M6.5 7l1 12a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12', 'M10 11v6M14 11v6'],
   duplicate: ['M9 3.5h6l3.5 3.5v9.5a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1z', 'M15 3.5V7h3.5', 'M5.5 7.5v12a1 1 0 0 0 1 1h8.5'],
+  /** Delete permanently: the bin, crossed out inside. */
+  trashX: ['M4.5 7h15', 'M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2', 'M6.5 7l1 12a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12', 'M9.8 11.3l4.4 4.4M14.2 11.3l-4.4 4.4'],
+  home: ['M3.5 11L12 4l8.5 7', 'M6 9.2V19a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1V9.2'],
 } as const;
 
 export type IconName = keyof typeof PATHS;

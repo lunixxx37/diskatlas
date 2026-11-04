@@ -35,7 +35,15 @@ func openURL(u string) error {
 
 func attachConsole() {}
 
-// No Recycle Bin and no File Explorer here: the features stay ["scan"].
-func platformRecycle() recycleSystem { return nil }
+// No Recycle Bin, no permanent deletion and no File Explorer here: the
+// features stay ["scan"].
+func platformCleanup() cleanupSystem { return nil }
 
 func platformReveal() func(string) error { return nil }
+
+func friendlyError(err error) string { return err.Error() }
+
+// No same-user check here: every connection is allowed.
+func platformOwners() ownerLookup { return nil }
+
+func selfSID() string { return "" }

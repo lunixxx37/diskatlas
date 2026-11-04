@@ -26,6 +26,63 @@
   margin-inline: auto;
 }
 
+/* The result still in memory, above everything else. */
+.last {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: clamp(20px, 3.2vw, 36px);
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.last__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.last__text {
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.last__title {
+  font-weight: 560;
+}
+
+.last__name {
+  color: var(--ink);
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.last__size {
+  color: var(--ink);
+}
+
+.last__notes .chip {
+  margin-left: 4px;
+}
+
+.last__open {
+  flex: none;
+}
+
+.last__open svg {
+  width: 15px;
+  height: 15px;
+}
+
 .start {
   display: grid;
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);

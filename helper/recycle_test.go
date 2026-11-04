@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// fakeRecycle is a recycleSystem over a made-up set of items.
+// fakeRecycle is a cleanupSystem over a made-up set of items.
 type fakeRecycle struct {
 	mu         sync.Mutex
 	items      map[string]itemInfo // by path; finalPath "" means "leads to itself"
@@ -19,11 +19,34 @@ type fakeRecycle struct {
 	openErr    map[string]error    // inspect fails like this
 	loc        knownLocations
 	locErr     error
-	fixed      []string          // drive roots that are local fixed drives
+	drives     map[string]string // drive root → type; others are "unknown"
 	win32      map[string]string // names Win32 rewrites
 	recycleErr map[string]error
-	stays      map[string]bool // recycling reports success, but the item stays
+	stays      map[string]bool // recycling or deleting reports success, but the item stays
 	recycled   []string
+	deletes    map[string]deleteCounts // what deleting an item does; the default deletes it
+	deleted    []string
+	dropErr    error  // asUser fails: the rights can't be dropped
+	rightsErr  error  // rightsCheck fails
+	asUserRuns []bool // the shell argument of each asUser call
+}
+
+func (f *fakeRecycle) asUser(shell bool, run func()) error {
+	f.mu.Lock()
+	f.asUserRuns = append(f.asUserRuns, shell)
+	err := f.dropErr
+	f.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	run()
+	return nil
+}
+
+func (f *fakeRecycle) rightsCheck() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.rightsErr
 }
 
 func newFakeRecycle() *fakeRecycle {
@@ -32,11 +55,48 @@ func newFakeRecycle() *fakeRecycle {
 		unknown:    map[string]bool{},
 		openErr:    map[string]error{},
 		loc:        testLocations(),
-		fixed:      []string{`C:\`, `D:\`},
+		drives:     map[string]string{`C:\`: "fixed", `D:\`: "fixed", `E:\`: "removable", `F:\`: "cdrom", `Z:\`: "network"},
 		win32:      map[string]string{},
 		recycleErr: map[string]error{},
 		stays:      map[string]bool{},
+		deletes:    map[string]deleteCounts{},
 	}
+}
+
+func (f *fakeRecycle) driveType(p string) string {
+	if len(p) >= 3 && p[1] == ':' {
+		if t, ok := f.drives[p[:3]]; ok {
+			return t
+		}
+		return "unknown"
+	}
+	return "network"
+}
+
+// deleteItem plays a deletion: the scripted counts, or one deleted entry.
+// The item goes away unless entries failed or it is set to stay.
+func (f *fakeRecycle) deleteItem(p string, isDir bool) deleteCounts {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleted = append(f.deleted, p)
+	c, scripted := f.deletes[p]
+	if !scripted {
+		if isDir {
+			c.folders = 1
+		} else {
+			c.files = 1
+		}
+	}
+	if c.failed == 0 && !f.stays[p] {
+		delete(f.items, p)
+	}
+	return c
+}
+
+func (f *fakeRecycle) deleteCalls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.deleted...)
 }
 
 func (f *fakeRecycle) file(p string, size uint64, mtime float64) {
@@ -65,15 +125,6 @@ func (f *fakeRecycle) locations() (knownLocations, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.loc, f.locErr
-}
-
-func (f *fakeRecycle) fixedDrive(p string) bool {
-	for _, root := range f.fixed {
-		if strings.HasPrefix(p, root) {
-			return true
-		}
-	}
-	return false
 }
 
 func (f *fakeRecycle) win32Path(p string) (string, error) {
@@ -159,7 +210,7 @@ func TestProtection(t *testing.T) {
 			t.Errorf("%s is protected: %s", p, why)
 		}
 	}
-	if why, _ := prot.check(`C:\ProgramData`); !strings.Contains(why, "inside it can be recycled") {
+	if why, _ := prot.check(`C:\ProgramData`); !strings.Contains(why, "but not what is inside it") {
 		t.Errorf("reason for ProgramData: %q", why)
 	}
 }
@@ -341,7 +392,7 @@ func TestRecycleEndpoint(t *testing.T) {
 	f.file(`C:\Users\Ann\a.txt`, 10, 1000)
 	f.dir(`C:\Users\Ann\Stuff`)
 	f.dir(`C:\Users`)
-	h := newTestHelper(t, serverConfig{recycle: f})
+	h := newTestHelper(t, serverConfig{cleanup: f})
 
 	body := func(items []recycleItem, dryRun bool) string {
 		return jsonString(map[string]any{"items": items, "dryRun": dryRun})
@@ -370,7 +421,7 @@ func TestRecycleEndpoint(t *testing.T) {
 	v := h.call("POST", "/v1/recycle", body(items, true), http.StatusOK)
 	want := `{"results":[{"message":"","path":"C:\\Users\\Ann\\Stuff","status":"ok"},{"message":"","path":"C:\\Users\\Ann\\a.txt","status":"ok"},` +
 		`{"message":"the path is not absolute","path":"relative.txt","status":"invalid"},` +
-		`{"message":"the users folder itself is protected; what is inside it can be recycled","path":"C:\\Users","status":"protected"}]}`
+		`{"message":"the users folder itself is protected, but not what is inside it","path":"C:\\Users","status":"protected"}]}`
 	if got := jsonString(v); got != want {
 		t.Errorf("dry run:\n got %s\nwant %s", got, want)
 	}
@@ -433,13 +484,13 @@ func TestFeatures(t *testing.T) {
 	if v := plain.call("GET", "/v1/info", "", http.StatusOK); fmt.Sprint(v["features"]) != "[scan]" {
 		t.Errorf("without clean-up actions: %v", v["features"])
 	}
-	full := newTestHelper(t, serverConfig{recycle: newFakeRecycle(), reveal: func(string) error { return nil }})
-	if v := full.call("GET", "/v1/info", "", http.StatusOK); fmt.Sprint(v["features"]) != "[scan reveal recycle]" {
+	full := newTestHelper(t, serverConfig{cleanup: newFakeRecycle(), reveal: func(string) error { return nil }})
+	if v := full.call("GET", "/v1/info", "", http.StatusOK); fmt.Sprint(v["features"]) != "[scan reveal recycle delete]" {
 		t.Errorf("with both: %v", v["features"])
 	}
 	// What the helper offers on this system.
 	onWindows := runtime.GOOS == "windows"
-	if (platformRecycle() != nil) != onWindows || (platformReveal() != nil) != onWindows {
-		t.Errorf("recycle %t, reveal %t on %s", platformRecycle() != nil, platformReveal() != nil, runtime.GOOS)
+	if (platformCleanup() != nil) != onWindows || (platformReveal() != nil) != onWindows {
+		t.Errorf("recycle %t, reveal %t on %s", platformCleanup() != nil, platformReveal() != nil, runtime.GOOS)
 	}
 }

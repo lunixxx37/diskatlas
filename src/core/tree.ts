@@ -9,8 +9,13 @@ export const FLAG_TOO_DEEP = 2;
 export const FLAG_LINK = 4;
 /** An online-only placeholder (e.g. OneDrive Files On-Demand): real size, nothing on disk (helper scans). */
 export const FLAG_CLOUD = 8;
-/** Moved to the Recycle Bin after the scan (set by `ScanTree.remove`, with everything inside). */
+/** Moved to the Recycle Bin or deleted after the scan (set by `ScanTree.remove`, with everything inside). */
 export const FLAG_REMOVED = 16;
+/**
+ * Deleted only in part after the scan (set by `ScanTree.markPartial`): some of its contents
+ * are gone, but which ones is unknown, so its numbers (and its ancestors') may be too high.
+ */
+export const FLAG_PARTIAL = 32;
 
 /** 'helper': read by the DiskAtlas Helper for Windows (docs/helper-protocol.md). */
 export type ScanSource = 'picker' | 'files' | 'demo' | 'helper';
@@ -217,14 +222,16 @@ export interface Removal {
 
 /**
  * Read access to a finished scan. Entries are addressed by index; the root is 0. The only
- * change after the scan is `remove()`, for an item moved to the Recycle Bin.
+ * changes after the scan are `remove()`, for an item moved to the Recycle Bin or deleted,
+ * and `markPartial()`, for a folder deleted in part.
  */
 export class ScanTree {
   readonly root = 0;
   private categories?: Uint8Array;
   /** End of each folder's children in childList (shrinks when a child is removed). */
   private readonly childEnd: Int32Array;
-  /** Counts removals, so caches can tell when their results are stale. */
+  private readonly partialList: number[] = [];
+  /** Counts changes (removals, partial deletions), so caches can tell when their results are stale. */
   version = 0;
 
   constructor(readonly data: ScanData) {
@@ -300,9 +307,30 @@ export class ScanTree {
     return (this.data.flags[i] & FLAG_CLOUD) !== 0;
   }
 
-  /** Moved to the Recycle Bin after the scan (or inside something that was). */
+  /** Moved to the Recycle Bin or deleted after the scan (or inside something that was). */
   removed(i: number): boolean {
     return (this.data.flags[i] & FLAG_REMOVED) !== 0;
+  }
+
+  /** Deleted only in part after the scan: its numbers may be off until the next scan. */
+  partial(i: number): boolean {
+    return (this.data.flags[i] & FLAG_PARTIAL) !== 0;
+  }
+
+  /** Entries marked with `markPartial`, in the order they were marked. */
+  get partials(): readonly number[] {
+    return this.partialList;
+  }
+
+  /**
+   * Marks a folder that was deleted only in part. Its numbers stay as scanned (which of its
+   * entries are gone is unknown), and the results say they may be off.
+   */
+  markPartial(i: number): void {
+    if (i < 0 || i >= this.count || this.removed(i) || this.partial(i)) return;
+    this.data.flags[i] |= FLAG_PARTIAL;
+    this.partialList.push(i);
+    this.version++;
   }
 
   /** Direct children, largest first. A view into the tree: do not modify it. */

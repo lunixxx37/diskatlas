@@ -21,6 +21,10 @@ export const en = {
     noName: '(no name)',
     folder: 'Folder',
     emptyFolder: 'Empty folder',
+    /** The wordmark in the top bar links to the start page. */
+    wordmarkLabel: 'DiskAtlas: start page',
+    /** Going to the start page during a survey stops it. */
+    homeStopped: 'The survey was stopped. What was read until then is kept as the last result.',
   },
 
   errors: {
@@ -61,6 +65,14 @@ export const en = {
   },
 
   start: {
+    /** The card for the result still in memory. */
+    last: {
+      title: 'Last survey',
+      open: 'Open result',
+      incomplete: 'incomplete',
+      demo: 'example data',
+      justNow: 'just now',
+    },
     eyebrow: 'Storage survey in your browser',
     title: "See what's filling your storage.",
     lede: (app: string) => `Choose a folder or a drive. ${app} surveys it right in your browser; nothing is uploaded.`,
@@ -108,7 +120,7 @@ export const en = {
       [
         'What the browser blocks, the ',
         { b: 'DiskAtlas Helper' },
-        ' for Windows can read: whole drives such as C:, system folders, and the space files take up on disk. While surveying it only reads; it moves something to the Recycle Bin only after you confirm it on this page.',
+        ' for Windows can read: whole drives such as C:, system folders, and the space files take up on disk. While surveying it only reads. It deletes something only after you confirm it on this page: into the Recycle Bin, or permanently if you explicitly choose that.',
       ],
     ] satisfies Rich[],
   },
@@ -117,7 +129,7 @@ export const en = {
   helper: {
     eyebrow: 'DiskAtlas Helper for Windows',
     title: 'Whole drives and system folders',
-    lede: "The browser can't open C:\\ or system folders. The DiskAtlas Helper can: a small program without a window. While surveying it only reads. It deletes something only after you confirm it on this page, and then only into the Recycle Bin. It quits by itself when it isn't needed.",
+    lede: "The browser can't open C:\\ or system folders. The DiskAtlas Helper can: a small program without a window. While surveying it only reads. It deletes something only after you confirm it on this page: into the Recycle Bin, or permanently if you explicitly choose that. It quits by itself when it isn't needed.",
     connect: 'Connect helper',
     permissionNote: 'Your browser will then ask whether this site may access apps on your device (“Loopback network”). Allow it, so the page can reach the helper.',
     quitNote: 'The helper has quit.',
@@ -154,6 +166,8 @@ export const en = {
     declined: 'The helper keeps running without administrator rights.',
     elevateFailed: "The helper didn't come back as administrator.",
     quit: 'Quit helper',
+    /** Next to "Quit helper" while it runs as administrator. */
+    quitElevated: "As administrator, the helper can also list protected folders. Quit it when you're done.",
     drives: 'Drives',
     loadingDrives: 'Reading the drives …',
     drivesFailed: "The list of drives couldn't be read.",
@@ -223,6 +237,12 @@ export const en = {
   },
 
   results: {
+    home: 'Start page',
+    homeTitle: 'Back to the start page. This result stays available there.',
+    partialTitle: 'Deleted only in part. ',
+    partialText: (names: string) => `Not everything in ${names} could be deleted. The numbers here may be off until you survey again.`,
+    /** A name in quotation marks, as in running text. */
+    quoted: (name: string) => `“${name}”`,
     heading: (name: string) => `Results for ${name}`,
     chipIncomplete: 'Incomplete',
     chipDemo: 'Example data',
@@ -330,6 +350,7 @@ export const en = {
   },
 
   flags: {
+    partial: 'Deleted only in part: the numbers may be off',
     unreadableFolder: "No access: the browser wasn't allowed to read this folder",
     unreadableFile: "No access: the browser wasn't allowed to read this file",
     tooDeep: 'Nested too deeply, not opened',
@@ -452,6 +473,37 @@ export const en = {
     done: (name: string, size: string) => `“${name}” (${size}) is in the Recycle Bin now. You can restore it from there.`,
     menu: 'Actions',
     copyPath: 'Copy path',
+    // Deleting permanently (POST /v1/delete).
+    deletePermanently: 'Delete permanently',
+    deleteItem: (name: string) => `Delete ${name} permanently`,
+    mode: 'What should happen?',
+    titlePermanent: 'Delete permanently?',
+    ledePermanent: "This can't be undone. Nothing goes to the Recycle Bin: it's gone for good.",
+    folderNotePermanent: (files: string) => `Everything inside is deleted with it: ${files}.`,
+    cloudPermanent: "It's online only, in OneDrive. Deleting it here usually deletes it from OneDrive in the cloud as well.",
+    cloudInsidePermanent: 'Some files in this folder are online only, in OneDrive. Deleting them here usually deletes them from OneDrive in the cloud as well.',
+    understand: "I understand this can't be undone",
+    readyPermanent: 'The helper can delete it permanently.',
+    workingPermanent: 'Deleting …',
+    failedPermanent: 'Nothing was deleted.',
+    blockedPermanent: "The helper couldn't check it, so it can't be deleted.",
+    close: 'Close',
+    /** While the helper runs as administrator: changes still use the user's own rights. */
+    normalRights: 'Deleting uses your normal rights, not administrator rights.',
+    deniedFailed: 'Windows denied access. The helper moves and deletes only with your normal rights, and this needs administrator rights.',
+    refusedPermanent: {
+      protected:
+        "This can't be deleted: it's protected. That covers drive roots and system files like pagefile.sys, the Windows and program folders, the Recycle Bin, user profiles and folders like Documents themselves, and the helper's own folder.",
+      unsupported: "The helper can't delete this safely, for example on a network or SUBST drive, through a link, or with a name that Windows reads differently.",
+    },
+    partial: (gone: string, left: string) => `Deleted only in part. Gone: ${gone}. Still there: ${left}.`,
+    partialHint: 'The numbers here may be off until you survey again.',
+    goneCounts: (files: string, folders: string) => `${files} and ${folders}`,
+    folders: { one: '# folder', other: '# folders' } satisfies Plural,
+    entries: { one: '# entry', other: '# entries' } satisfies Plural,
+    instead: "Windows can't put this in the Recycle Bin here, but the helper can delete it permanently.",
+    insteadButton: 'Delete permanently instead…',
+    deleted: (name: string, size: string) => `“${name}” (${size}) is deleted permanently.`,
   },
 
   /** Possible duplicates: same name and size (or same size only). */

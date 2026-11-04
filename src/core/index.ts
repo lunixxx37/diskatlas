@@ -59,6 +59,8 @@ export {
   loopbackPermission,
   recycleItem,
   scanWithHelper,
+  type DeleteResult,
+  type DeleteStatus,
   type HelperDrive,
   type HelperDriveType,
   type HelperElevation,

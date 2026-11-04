@@ -175,6 +175,8 @@ export class HelperPanel {
     if (link.note === 'declined') notes.push(fine('info', t.helper.declined));
     if (link.note === 'elevate-failed') notes.push(fine('alert', t.helper.elevateFailed));
     if (!link.elevated && !elevating) notes.push(fine('shield', t.helper.elevateNote));
+    // As administrator it can list protected folders for any program of this user: quit it when done.
+    if (link.elevated && !elevating) notes.push(fine('power', t.helper.quitElevated));
     return [head, ...notes, this.driveList(elevating), this.pathForm(elevating)];
   }
 

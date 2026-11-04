@@ -46,4 +46,5 @@ DiskAtlas stays private while it is in development. These steps take it public.
 ## Later
 
 - Count hard links only once (helper), so system drives add up to the space really used.
+- Give recycle and delete results a stable error code (for example `access_denied`, `in_use`), so the website doesn't have to recognise Windows' English message text. Windows without English message resources may answer in its own language.
 - Search and filter; compare with the last scan.
