@@ -10,10 +10,14 @@ DiskAtlas stays private while it is in development. These steps take it public.
 
 ## 2. Helper release
 
-- [ ] Icon and Windows version information for `DiskAtlas-Helper.exe`.
-- [ ] Release workflow: on a `v*` tag, build the exe and attach it to a GitHub Release. The website's download button points to `https://github.com/lunixxx37/diskatlas/releases/latest/download/DiskAtlas-Helper.exe`.
-- [ ] Code signing: apply to SignPath Foundation, which needs the public repository and the MIT license. Until it is signed, Windows SmartScreen warns on download.
-- [ ] On the development PC, remove the test link registration, which points at the development build with `--dev`:
+- [x] Icon and Windows version information for `DiskAtlas-Helper.exe`, added by go-winres in GitHub builds.
+- [x] Release workflow: on a `v*` tag, build the exe and attach it to a GitHub Release. The website's download button points to `https://github.com/lunixxx37/diskatlas/releases/latest/download/DiskAtlas-Helper.exe`. The test pre-release `v0.1.0-rc.1` worked; delete it before the launch if you like.
+- [ ] Code signing: apply at [signpath.org/apply](https://signpath.org/apply.html) once the repository is public. Until the helper is signed, Windows SmartScreen warns on download and UAC shows "unknown publisher".
+  - SignPath Foundation's [terms](https://signpath.org/terms) require an open-source project without proprietary parts, built only from your own sources, and multi-factor authentication on GitHub and SignPath for everyone on the team.
+  - The certificate is issued to SignPath Foundation, so Windows names it as the publisher, not you.
+  - Signing then runs as a step in `.github/workflows/release.yml`, where a comment marks the spot. It needs an API token as a repository secret and the organization ID.
+- [ ] Release `v0.1.0`: push the tag, and the workflow builds and publishes it.
+- [ ] On the development PC, remove the test link registration, which points at the development build with `--dev`. Run this in your own terminal, not from a sandboxed tool:
 
   ```bash
   helper/bin/DiskAtlas-Helper.exe --uninstall
