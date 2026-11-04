@@ -61,5 +61,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/DiskAtlas-Helper.exe dist/DiskAtlas-Helper-arm64.exe dist/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --title "DiskAtlas Helper ${{ steps.v.outputs.version }}" \
-            --notes "The small program that lets the DiskAtlas website survey whole drives such as C:\\ and system folders. Download **DiskAtlas-Helper.exe** (or DiskAtlas-Helper-arm64.exe for Windows on ARM) and run it once. It isn't code-signed yet, so Windows SmartScreen may warn: choose \"More info\", then \"Run anyway\". SHA256SUMS.txt lists the checksums." \
+            --notes "The small program that lets the DiskAtlas website survey whole drives such as C:\\ and system folders. Download **DiskAtlas-Helper.exe** (or DiskAtlas-Helper-arm64.exe for Windows on ARM) and run it once. On its first run it registers the diskatlas-helper:// link for your Windows user; \`DiskAtlas-Helper.exe --uninstall\` removes it again. It isn't code-signed yet, so Windows SmartScreen may warn: choose \"More info\", then \"Run anyway\". SHA256SUMS.txt lists the checksums.
+
+**Code signing policy:** Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org) (applied for). Details: https://github.com/lunixxx37/diskatlas#code-signing-policy" \
             $prerelease

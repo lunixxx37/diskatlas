@@ -142,7 +142,7 @@ export const de: Messages = {
     retry: 'Erneut versuchen',
     waiting: (seconds) =>
       `Warte auf den Helper … ${seconds} s. Dein Browser fragt oben im Fenster, ob er DiskAtlas-Helper.exe öffnen darf. Wähle „Öffnen“, die Abfrage übersieht man leicht.`,
-    firstRun: 'Starte die heruntergeladene Datei einmal. Sie läuft dann ohne Fenster im Hintergrund.',
+    firstRun: 'Starte die heruntergeladene Datei einmal. Sie läuft dann ohne Fenster im Hintergrund und richtet für deinen Windows-Benutzer den Link diskatlas-helper:// ein, über den diese Seite sie später starten kann. „DiskAtlas-Helper.exe --uninstall“ entfernt den Link wieder.',
     smartScreen: [
       'Windows SmartScreen warnt eventuell, weil der Helper noch nicht signiert ist: Wähle ',
       { b: 'Weitere Informationen' },
