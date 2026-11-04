@@ -47,22 +47,13 @@ An optional small program for what the browser can't open: whole drives such as 
 
 Scanning only reads. The helper changes something only after you confirm it on the website: it moves an item to the Recycle Bin, or deletes it permanently if you explicitly choose that and confirm again. It always refuses system locations and never follows links while deleting.
 
-The helper listens only on `127.0.0.1` (ports 41417–41419), accepts connections only from programs of the same Windows user, and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
+The helper listens only on `127.0.0.1` (ports 41417–41419), accepts connections only from programs of the same Windows user, and answers only the DiskAtlas website. It never connects to the internet itself. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
 
 **What it changes on your PC:** it needs no installation. When you first run `DiskAtlas-Helper.exe`, it registers the `diskatlas-helper://` link for your Windows user, under `HKEY_CURRENT_USER\Software\Classes\diskatlas-helper`, so that the website can start it later. No administrator rights are needed for that. It writes a small log of starts, stops and errors to `%LOCALAPPDATA%\DiskAtlas\helper.log`; the log never contains the names of scanned files.
 
 **Removing it:** run `DiskAtlas-Helper.exe --uninstall` to remove the link registration, then delete the exe and, if you like, the folder `%LOCALAPPDATA%\DiskAtlas`.
 
-### Code signing policy
-
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). (Applied for; until it is granted, releases of the helper are unsigned.)
-
-- Committers and reviewers: [lunixxx37](https://github.com/lunixxx37)
-- Approvers: [lunixxx37](https://github.com/lunixxx37)
-
-Only `DiskAtlas-Helper.exe` and `DiskAtlas-Helper-arm64.exe` are signed. They are built from this repository by the [release workflow](.github/workflows/release.yml), and every release is approved by hand before it is signed.
-
-Privacy policy: This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+**Code signing:** the helper isn't code-signed yet, so Windows SmartScreen may warn when you download or first start it: choose "More info", then "Run anyway". On PCs with Smart App Control turned on, Windows blocks unsigned programs that it doesn't know yet, and there is no "Run anyway". Every release is built from this repository by the [release workflow](.github/workflows/release.yml), and `SHA256SUMS.txt` lists the checksums of its files; in PowerShell, `Get-FileHash DiskAtlas-Helper.exe` shows the one of your download.
 
 Building it requires Go 1.25 or newer:
 
