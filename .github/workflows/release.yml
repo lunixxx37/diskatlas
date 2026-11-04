@@ -47,6 +47,9 @@ jobs:
             GOARCH=$arch go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=${{ steps.v.outputs.version }}" -o "dist/$name" .
           done
           (cd dist && sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Show the version information
+        shell: pwsh
+        run: (Get-Item dist/DiskAtlas-Helper.exe).VersionInfo | Format-List FileDescription, ProductName, FileVersion, ProductVersion, LegalCopyright, OriginalFilename
       # Code signing goes here once SignPath Foundation has accepted the
       # project (see docs/launch-checklist.md).
       - name: Publish the release

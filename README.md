@@ -59,6 +59,10 @@ go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=0.1.0" -o bin/D
 
 While working on the website with `npm run dev`, start it with `bin/DiskAtlas-Helper.exe --dev --serve --no-open`.
 
+A local build has no icon. The icon, version information and manifest come from `helper/winres`, and [go-winres](https://github.com/tc-hib/go-winres) adds them in GitHub builds.
+
+**Releases:** push a tag such as `v0.1.0`. The *Release helper* workflow then builds `DiskAtlas-Helper.exe` (x64) and `DiskAtlas-Helper-arm64.exe` and publishes them with SHA-256 checksums as a GitHub release. The website's download button always points to the latest release. A tag with a suffix, such as `v0.1.0-rc.1`, becomes a pre-release, which that link skips.
+
 ## Development
 
 Requires Node.js 22 or newer.
