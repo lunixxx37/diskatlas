@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f3f0e8" />
+    <meta
+      name="description"
+      content="See what's filling your storage: survey folders and drives right in your browser, with a folder tree, a map, the largest files, file types and file age. Nothing is uploaded."
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Applies a stored theme and the interface language before the first paint (an external file, as the CSP forbids inline scripts). -->
+    <script src="/theme-init.js"></script>
+    <title>DiskAtlas</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      <div style="max-width: 36rem; margin: 3rem auto; padding: 0 1rem; font: 16px/1.5 system-ui, sans-serif">
+        <p>DiskAtlas surveys folders right in your browser and needs JavaScript to do so. Please turn it on and reload the page.</p>
+        <p lang="de">DiskAtlas vermisst Ordner direkt in deinem Browser und braucht dafür JavaScript. Bitte aktiviere es und lade die Seite neu.</p>
+      </div>
+    </noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

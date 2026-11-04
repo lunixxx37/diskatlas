@@ -1,0 +1,408 @@
+/* The folder tree: virtualized rows in a grid of columns. */
+
+.ftree {
+  /* Column widths; folder-tree.ts (updateColumns) uses the same numbers. */
+  --c-size: 72px;
+  --c-share: 92px;
+  --c-files: 60px;
+  --c-date: 78px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pane__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 6px 12px 6px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pane__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.pane__title svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-2);
+}
+
+.ftree__cols,
+.tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-share) var(--c-files) var(--c-date);
+  column-gap: 12px;
+  align-items: center;
+}
+
+.ftree__cols {
+  height: 30px;
+  padding: 0 calc(12px + var(--sbw, 0px)) 0 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.ftree__cols .tc--size,
+.ftree__cols .tc--files,
+.ftree__cols .tc--date {
+  text-align: right;
+}
+
+.ftree__cols .tc--share {
+  padding-left: 2px;
+}
+
+.ftree__scroller {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Focus is shown on the active row (aria-activedescendant), not around the whole list. */
+.ftree__scroller:focus-visible {
+  outline: none;
+}
+
+.ftree__spacer {
+  width: 1px;
+}
+
+.ftree__layer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+}
+
+.tr {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--row-h, 30px);
+  padding: 0 12px 0 14px;
+  font-size: 13.5px;
+  cursor: default;
+  user-select: none;
+  contain: layout style;
+}
+
+.tr[hidden] {
+  display: none;
+}
+
+.tr:hover,
+.tr.is-linked {
+  background: var(--panel-2);
+}
+
+.tr.is-linked {
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+
+.tr.is-selected {
+  background: var(--accent-wash);
+}
+
+.tr.is-selected::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.ftree__scroller:focus-visible .tr.is-active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.tr.is-flash {
+  animation: row-flash 1800ms ease-out;
+}
+
+@keyframes row-flash {
+  0%,
+  35% {
+    background: var(--accent-wash-strong);
+  }
+}
+
+.tc {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.tr .tc--size,
+.tr .tc--files,
+.tr .tc--date {
+  font-size: 12.5px;
+  text-align: right;
+}
+
+.tr .tc--files,
+.tr .tc--date {
+  color: var(--ink-2);
+}
+
+.tc--name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+}
+
+.tr__indent {
+  flex: none;
+  align-self: stretch;
+  width: calc(var(--depth, 0) * 12px);
+  margin-right: -2px;
+  background: repeating-linear-gradient(to right, transparent 0 5px, var(--line) 5px 6px, transparent 6px 12px);
+}
+
+.tr__chev {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.tr__chev svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms var(--ease);
+}
+
+.tr__chev:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+
+.tr[aria-expanded="true"] .tr__chev svg {
+  transform: rotate(90deg);
+}
+
+.tr[data-expandable="false"] .tr__chev {
+  visibility: hidden;
+}
+
+.tr__cat {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--cat);
+}
+
+.tr__kind {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-2);
+}
+
+.tr__kind svg {
+  width: 15px;
+  height: 15px;
+}
+
+.tr[data-kind="dir"] .tr__kind-file,
+.tr[data-kind="file"] .tr__kind-dir {
+  display: none;
+}
+
+.tr__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tr[data-kind="dir"] .tr__name {
+  font-weight: 560;
+}
+
+.tr__flag {
+  display: none;
+  flex: none;
+  color: var(--warn);
+}
+
+.tr__flag svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tr[data-flag="locked"] .tr__flag,
+.tr[data-flag="deep"] .tr__flag {
+  display: inline-flex;
+}
+
+.tr[data-flag="locked"] .tr__flag-deep,
+.tr[data-flag="deep"] .tr__flag-locked {
+  display: none;
+}
+
+.tr__copy {
+  display: none;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  margin-left: auto;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.tr__copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tr:hover .tr__copy {
+  display: grid;
+}
+
+.tr__copy:hover {
+  background: var(--panel-3);
+  color: var(--ink);
+}
+
+.tc--share {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.share {
+  display: block;
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--bar-track);
+}
+
+.share[hidden] {
+  display: none;
+}
+
+.share__fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 3px 3px 0;
+  background: var(--bar);
+}
+
+.share--cat .share__fill {
+  background: var(--cat);
+}
+
+.share__pct {
+  flex: none;
+  width: 42px;
+  color: var(--ink-2);
+  font-size: 12px;
+  text-align: right;
+}
+
+.selbar {
+  flex: none;
+  padding: 5px 8px 5px 14px;
+  border-top: 1px solid var(--line);
+}
+
+.selbar__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 32px;
+}
+
+.selbar__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink-2);
+}
+
+.selbar__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.selbar .mtrunc {
+  flex: 1;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.selbar .btn {
+  flex: none;
+}
+
+.selbar__flag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 4px;
+  color: var(--warn);
+  font-size: 12.5px;
+}
+
+.selbar__flag[hidden] {
+  display: none;
+}
+
+.selbar__flag svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Columns that fit (set by folder-tree.ts from the pane width and the deepest visible row). */
+.ftree[data-cols="4"] .ftree__cols,
+.ftree[data-cols="4"] .tr {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-share) var(--c-files);
+}
+
+.ftree[data-cols="3"] .ftree__cols,
+.ftree[data-cols="3"] .tr {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) var(--c-share);
+}
+
+.ftree[data-cols="2"] .ftree__cols,
+.ftree[data-cols="2"] .tr {
+  grid-template-columns: minmax(0, 1fr) var(--c-size) 42px;
+  column-gap: 8px;
+}
+
+.ftree:is([data-cols="4"], [data-cols="3"], [data-cols="2"]) .tc--date,
+.ftree:is([data-cols="3"], [data-cols="2"]) .tc--files,
+.ftree[data-cols="2"] .tr .share {
+  display: none;
+}
+
+.ftree[data-cols="2"] .ftree__cols .tc--share {
+  text-align: right;
+}

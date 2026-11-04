@@ -1,0 +1,203 @@
+/*
+ * Design tokens. Two themes:
+ *   "Kartenpapier"     light: warm map paper, deep ink, hairlines.
+ *   "Nachtvermessung"  dark: blue-black ground, warm off-white ink.
+ * The system preference decides unless <html data-theme="light|dark"> overrides it.
+ *
+ * Category colours are the map's land-use legend, in CATEGORIES order. They were
+ * computed, not eyeballed: the eight hues pass the dataviz validator's hard gates on the
+ * adjacent pairlist in both modes (lightness band, chroma floor, CVD Delta E >= 8,
+ * normal-vision Delta E >= 15). In the treemap any two regions can touch, which eight
+ * hues cannot survive pairwise, so the map always carries secondary encoding too:
+ * 2px surface gaps, labels, tooltips, a legend that isolates one category, and the
+ * "Dateitypen" table. "Sonstige" is the neutral grey; the age ramp is one sepia hue
+ * (validated as an ordinal ramp, newest light -> oldest dark, flipped for dark mode).
+ */
+
+:root {
+  color-scheme: light;
+
+  --paper: #f3f0e8;
+  --panel: #faf8f3;
+  --panel-2: #ece8de;
+  --panel-3: #e3ded2;
+  --line: #ddd7ca;
+  --line-strong: #c9c1b0;
+  --control-line: #857e70;
+
+  --ink: #1c1e22;
+  --ink-2: #4b4e54;
+  --muted: #6a675f;
+
+  --accent: #c2451a;
+  --accent-strong: #a8380f;
+  --accent-text: #a8380f;
+  --on-accent: #ffffff;
+  --accent-wash: rgb(194 69 26 / 0.09);
+  --accent-wash-strong: rgb(194 69 26 / 0.16);
+
+  --warn: #8a5300;
+  --warn-wash: rgb(176 112 20 / 0.1);
+  --warn-line: rgb(138 83 0 / 0.35);
+
+  --bar: #8f887a;
+  --bar-track: #e6e1d6;
+  --grid-line: rgb(28 30 34 / 0.055);
+  --grid-line-major: rgb(28 30 34 / 0.1);
+  --shadow-pop: 0 1px 0 rgb(28 30 34 / 0.04), 0 12px 32px -12px rgb(28 30 34 / 0.28);
+
+  --cat-video: #00649d;
+  --cat-image: #168052;
+  --cat-audio: #9a73c8;
+  --cat-archive: #d0af50;
+  --cat-program: #2fb5ae;
+  --cat-document: #7f3261;
+  --cat-code: #869638;
+  --cat-data: #7a4300;
+  --cat-other: #8f8b82;
+
+  --age-1: #c7a384;
+  --age-2: #b58c68;
+  --age-3: #a17651;
+  --age-4: #8b623d;
+  --age-5: #744f2d;
+  --age-6: #5c3d21;
+  --age-unknown: #aaa69c;
+
+  --map-bg: #faf8f3;
+  --frame-0: #ebe6da;
+  --frame-1: #e1dbce;
+  --frame-2: #d8d1c2;
+  --frame-line: #cdc5b4;
+  --hatch-bg: #ece8de;
+  --hatch-line: #a39d90;
+  --label-ink: #16181c;
+  --label-light: #ffffff;
+
+  --font-ui: "Schibsted Grotesk Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --paper: #101417;
+    --panel: #161b1f;
+    --panel-2: #1c2227;
+    --panel-3: #232a30;
+    --line: #262d33;
+    --line-strong: #353e45;
+    --control-line: #737b82;
+
+    --ink: #ece7dc;
+    --ink-2: #b8b3a8;
+    --muted: #8f8b83;
+
+    --accent: #f47a45;
+    --accent-strong: #ff9161;
+    --accent-text: #f58a5c;
+    --on-accent: #101417;
+    --accent-wash: rgb(244 122 69 / 0.11);
+    --accent-wash-strong: rgb(244 122 69 / 0.2);
+
+    --warn: #e0a64a;
+    --warn-wash: rgb(224 166 74 / 0.09);
+    --warn-line: rgb(224 166 74 / 0.32);
+
+    --bar: #6c7277;
+    --bar-track: #232a30;
+    --grid-line: rgb(236 231 220 / 0.04);
+    --grid-line-major: rgb(236 231 220 / 0.08);
+    --shadow-pop: 0 1px 0 rgb(0 0 0 / 0.3), 0 16px 40px -12px rgb(0 0 0 / 0.7);
+
+    --cat-video: #0c76b7;
+    --cat-image: #017d4d;
+    --cat-audio: #a47dd0;
+    --cat-archive: #b28f17;
+    --cat-program: #0f9690;
+    --cat-document: #8c416e;
+    --cat-code: #728309;
+    --cat-data: #8c4d00;
+    --cat-other: #6f7275;
+
+    --age-1: #6b533a;
+    --age-2: #846546;
+    --age-3: #9d7852;
+    --age-4: #b38d67;
+    --age-5: #c8a37f;
+    --age-6: #daba9c;
+    --age-unknown: #5c6166;
+
+    --map-bg: #161b1f;
+    --frame-0: #1e252a;
+    --frame-1: #252d33;
+    --frame-2: #2c353c;
+    --frame-line: #3a434b;
+    --hatch-bg: #1c2227;
+    --hatch-line: #4d565e;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #101417;
+  --panel: #161b1f;
+  --panel-2: #1c2227;
+  --panel-3: #232a30;
+  --line: #262d33;
+  --line-strong: #353e45;
+  --control-line: #737b82;
+
+  --ink: #ece7dc;
+  --ink-2: #b8b3a8;
+  --muted: #8f8b83;
+
+  --accent: #f47a45;
+  --accent-strong: #ff9161;
+  --accent-text: #f58a5c;
+  --on-accent: #101417;
+  --accent-wash: rgb(244 122 69 / 0.11);
+  --accent-wash-strong: rgb(244 122 69 / 0.2);
+
+  --warn: #e0a64a;
+  --warn-wash: rgb(224 166 74 / 0.09);
+  --warn-line: rgb(224 166 74 / 0.32);
+
+  --bar: #6c7277;
+  --bar-track: #232a30;
+  --grid-line: rgb(236 231 220 / 0.04);
+  --grid-line-major: rgb(236 231 220 / 0.08);
+  --shadow-pop: 0 1px 0 rgb(0 0 0 / 0.3), 0 16px 40px -12px rgb(0 0 0 / 0.7);
+
+  --cat-video: #0c76b7;
+  --cat-image: #017d4d;
+  --cat-audio: #a47dd0;
+  --cat-archive: #b28f17;
+  --cat-program: #0f9690;
+  --cat-document: #8c416e;
+  --cat-code: #728309;
+  --cat-data: #8c4d00;
+  --cat-other: #6f7275;
+
+  --age-1: #6b533a;
+  --age-2: #846546;
+  --age-3: #9d7852;
+  --age-4: #b38d67;
+  --age-5: #c8a37f;
+  --age-6: #daba9c;
+  --age-unknown: #5c6166;
+
+  --map-bg: #161b1f;
+  --frame-0: #1e252a;
+  --frame-1: #252d33;
+  --frame-2: #2c353c;
+  --frame-line: #3a434b;
+  --hatch-bg: #1c2227;
+  --hatch-line: #4d565e;
+}

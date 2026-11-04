@@ -1,0 +1,393 @@
+import {
+  demoRootName,
+  demoScan,
+  dirHandleFromDrop,
+  formatBytes,
+  pickDirectory,
+  scanDirectory,
+  supportsDirectoryPicker,
+  supportsFolderInput,
+  treeFromFiles,
+  type RunningScan,
+  type ScanProgress,
+  type ScanTree,
+} from '../core';
+import { APP_NAME } from './brand';
+import { h, setText } from './dom';
+import { displayName } from './format';
+import { detectLanguage, lang, setLanguage, storeLanguage, storedLanguage, t, type Lang } from './i18n';
+import { brandGlyph, icon } from './icons';
+import { LangSwitch } from './lang-switch';
+import { ResultsView, type ResultsState } from './results/results-view';
+import { ScanView, noticeView, type ScanViewState } from './scan-view';
+import { StartView, type Support } from './start-view';
+import { ThemeManager, ThemeSwitch } from './theme';
+import { toast } from './toast';
+import { tooltip } from './tooltip';
+
+type Source = { kind: 'handle'; handle: FileSystemDirectoryHandle } | { kind: 'files' } | { kind: 'demo' };
+
+interface View {
+  el: HTMLElement;
+  destroy(): void;
+}
+
+type ViewName = 'start' | 'scan' | 'results' | 'notice';
+
+interface ShowOptions {
+  context?: Node | null;
+  actions?: Node | null;
+  /** Builds this view again in the active language, with the state it has by then. */
+  rerender: () => void;
+}
+
+/**
+ * The application shell and its states: start → scan → results (or a notice when a
+ * scan fails). Scans are tokened, so a superseded scan can never replace a newer view.
+ * A language switch rebuilds the current view in place and keeps its state: a running
+ * scan keeps running, results keep their folder, selection, tab and tree.
+ */
+export class App {
+  private readonly theme = new ThemeManager();
+  private readonly support: Support;
+  private readonly shell: HTMLElement;
+  private readonly context: HTMLElement;
+  private readonly actions: HTMLElement;
+  private readonly input: HTMLInputElement;
+  private readonly dropOverlay: HTMLElement;
+  private readonly dropText: HTMLElement;
+  private readonly skipLink: HTMLElement;
+  private readonly footerClaim: HTMLElement;
+  private readonly footerUnits: HTMLElement;
+  private readonly themeSwitch: ThemeSwitch;
+  private readonly langSwitch: LangSwitch;
+  private view: View | null = null;
+  private viewEl: HTMLElement;
+  private startView: StartView | null = null;
+  private scanView: ScanView | null = null;
+  private resultsView: ResultsView | null = null;
+  private rerender: (() => void) | null = null;
+  /** True while a language switch rebuilds the view: keep scroll position and focus. */
+  private relocalizing = false;
+  private source: Source | null = null;
+  private running: RunningScan | null = null;
+  private token = 0;
+  private dragDepth = 0;
+
+  constructor(root: HTMLElement) {
+    setLanguage(storedLanguage() ?? detectLanguage());
+    this.support = supportsDirectoryPicker() ? 'picker' : supportsFolderInput() ? 'files' : 'none';
+
+    this.themeSwitch = new ThemeSwitch(this.theme);
+    this.langSwitch = new LangSwitch(this.changeLanguage);
+    this.context = h('div', { class: 'topbar__slot topbar__slot--context' });
+    this.actions = h('div', { class: 'topbar__slot topbar__slot--actions' });
+    const topbar = h(
+      'header',
+      { class: 'topbar' },
+      h('div', { class: 'topbar__brand' }, h('span', { class: 'wordmark' }, brandGlyph(), h('span', { class: 'wordmark__text', text: APP_NAME }))),
+      this.context,
+      this.actions,
+      h('div', { class: 'topbar__prefs' }, this.langSwitch.el, this.themeSwitch.el),
+    );
+
+    this.input = h('input', { type: 'file', class: 'sr-only', tabindex: '-1', 'aria-hidden': 'true' });
+    this.input.webkitdirectory = true;
+    this.input.multiple = true;
+    this.input.addEventListener('change', this.onFilesChosen);
+
+    this.dropText = h('p');
+    this.dropOverlay = h(
+      'div',
+      { class: 'drop-overlay', hidden: true, 'aria-hidden': 'true' },
+      h('div', { class: 'drop-overlay__inner corners' }, icon('folderScan'), this.dropText),
+    );
+
+    this.skipLink = h('a', { class: 'skip-link', href: '#main' });
+    this.footerClaim = h('span');
+    this.footerUnits = h('p', { class: 'site-footer__meta' });
+    this.viewEl = h('main', { class: 'view', id: 'main' });
+    this.shell = h(
+      'div',
+      { class: 'app', 'data-view': 'start' },
+      this.skipLink,
+      topbar,
+      this.viewEl,
+      h('footer', { class: 'site-footer' }, h('p', { class: 'site-footer__claim' }, icon('shield'), this.footerClaim), this.footerUnits),
+      this.input,
+      this.dropOverlay,
+    );
+    this.relabelShell();
+    root.replaceChildren(this.shell);
+    this.installDragAndDrop();
+  }
+
+  /** Opens the start view, or plays the demo right away for `?demo`. */
+  start(): void {
+    if (new URLSearchParams(location.search).has('demo')) this.runDemo();
+    else this.showStart();
+  }
+
+  /** Dev hook: show any tree as a result. */
+  showTree(tree: ScanTree): void {
+    this.token++;
+    this.cancelRunning();
+    this.source = null;
+    this.showResults(tree);
+  }
+
+  /** Scans a folder handle (from the picker, a drop, or the dev hook). Resolves when the result (or an error) is shown. */
+  scanHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+    this.source = { kind: 'handle', handle };
+    return this.run(handle.name || t.app.selectedFolder, (onProgress) => scanDirectory(handle, onProgress));
+  }
+
+  // ---------- language ----------
+
+  /** From the EN/DE switch: everything on screen is rebuilt in the new language, state kept. */
+  private readonly changeLanguage = (next: Lang): void => {
+    if (next === lang()) return;
+    setLanguage(next);
+    storeLanguage(next);
+    this.relabelShell();
+    this.relocalizing = true;
+    try {
+      this.rerender?.();
+    } finally {
+      this.relocalizing = false;
+    }
+  };
+
+  /** Text in the parts of the page that stay while views change. */
+  private relabelShell(): void {
+    setText(this.skipLink, t.app.skipLink);
+    setText(this.dropText, t.app.dropOverlay);
+    setText(this.footerClaim, t.app.footerClaim);
+    setText(this.footerUnits, t.app.footerUnits);
+    this.themeSwitch.relabel();
+    this.langSwitch.relabel();
+  }
+
+  // ---------- flows ----------
+
+  private readonly pick = (): void => {
+    if (this.support === 'picker') {
+      pickDirectory().then(
+        (handle) => {
+          if (handle) void this.scanHandle(handle);
+        },
+        (error: unknown) => toast(t.errors.openFailed(errorText(error)), 'alert', 6000),
+      );
+    } else if (this.support === 'files') {
+      this.input.value = '';
+      this.input.click();
+    } else {
+      this.showStart();
+      toast(t.errors.noFolderSupport, 'alert', 6000);
+    }
+  };
+
+  /** The demo drive takes its names from the language that is active when it is created. */
+  private readonly runDemo = (): void => {
+    this.source = { kind: 'demo' };
+    const language = lang();
+    void this.run(demoRootName(language), (onProgress) => demoScan(onProgress, undefined, language));
+  };
+
+  private readonly rescan = (): void => {
+    const source = this.source;
+    if (!source) return;
+    if (source.kind === 'handle') void this.scanHandle(source.handle);
+    else if (source.kind === 'demo') this.runDemo();
+    else {
+      this.input.value = '';
+      this.input.click();
+    }
+  };
+
+  private run(name: string, startScan: (onProgress: (p: ScanProgress) => void) => RunningScan): Promise<void> {
+    this.cancelRunning();
+    const token = ++this.token;
+    const showScan = (resume?: ScanViewState) => {
+      const view = new ScanView({ name, mode: 'scan', onCancel: () => this.running?.cancel(), resume });
+      this.show('scan', view, `${t.app.titleScan(name)} – ${APP_NAME}`, { rerender: () => showScan(this.scanView?.state) });
+      this.scanView = view;
+    };
+    showScan();
+    let scan: RunningScan;
+    try {
+      scan = startScan((progress) => {
+        if (token === this.token) this.scanView?.update(progress);
+      });
+    } catch (error) {
+      this.showError(error);
+      return Promise.resolve();
+    }
+    this.running = scan;
+    return scan.result.then(
+      (tree) => {
+        if (token !== this.token) return;
+        this.running = null;
+        this.showResults(tree);
+      },
+      (error: unknown) => {
+        if (token !== this.token) return;
+        this.running = null;
+        this.showError(error);
+      },
+    );
+  }
+
+  private readonly onFilesChosen = (): void => {
+    const files = this.input.files;
+    if (!files) return;
+    this.cancelRunning();
+    this.source = { kind: 'files' };
+    const token = ++this.token;
+    const name = files.length > 0 ? files[0].webkitRelativePath.split('/')[0] || t.app.folder : t.app.folder;
+    let bytes = 0;
+    for (let k = 0; k < files.length; k++) bytes += files[k].size;
+    const showReading = (resume?: ScanViewState) => {
+      const view = new ScanView({ name, mode: 'files', resume });
+      if (!resume) view.showTotals(files.length, bytes);
+      this.show('scan', view, `${t.app.titleFiles(name)} – ${APP_NAME}`, { rerender: () => showReading(this.scanView?.state) });
+      this.scanView = view;
+    };
+    showReading();
+    // Let the scan view paint before the (synchronous) tree is built.
+    requestAnimationFrame(() =>
+      window.setTimeout(() => {
+        if (token !== this.token) return;
+        try {
+          this.showResults(treeFromFiles(files, t.app.emptyFolder));
+        } catch (error) {
+          this.showError(error);
+        }
+      }, 40),
+    );
+  };
+
+  private cancelRunning(): void {
+    this.running?.cancel();
+    this.running = null;
+  }
+
+  // ---------- views ----------
+
+  private showStart(knowOpen = false): void {
+    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen });
+    this.show('start', view, `${APP_NAME} – ${t.app.titleStart}`, { rerender: () => this.showStart(this.startView?.knowOpen) });
+    this.startView = view;
+  }
+
+  private showResults(tree: ScanTree): void {
+    const build = (restore?: ResultsState) => {
+      const view = new ResultsView({ tree, theme: this.theme, onRescan: this.source ? this.rescan : null, onOtherFolder: this.pick, restore });
+      this.show('results', view, `${displayName(tree, tree.root)} · ${formatBytes(tree.size(tree.root))} – ${APP_NAME}`, {
+        context: view.context,
+        actions: view.actions,
+        rerender: () => build(this.resultsView?.snapshot()),
+      });
+      this.resultsView = view;
+      if (!restore) view.focus();
+    };
+    build();
+  }
+
+  private showError(error: unknown): void {
+    const view = noticeView({
+      title: t.errors.title,
+      message: t.errors.message,
+      detail: errorText(error),
+      primary: this.source ? { label: t.errors.retry, action: this.rescan } : undefined,
+      secondary: { label: t.errors.otherFolder, action: this.pick },
+    });
+    const relocalizing = this.relocalizing;
+    this.show('notice', view, `${t.app.titleError} – ${APP_NAME}`, { rerender: () => this.showError(error) });
+    if (!relocalizing) view.el.querySelector<HTMLElement>('h1')?.focus({ preventScroll: true });
+  }
+
+  private show(name: ViewName, view: View, title: string, options: ShowOptions): void {
+    const scrollY = window.scrollY;
+    this.view?.destroy();
+    tooltip.hide();
+    this.startView = null;
+    this.scanView = null;
+    this.resultsView = null;
+    this.view = view;
+    this.viewEl.replaceWith(view.el);
+    this.viewEl = view.el;
+    this.shell.dataset.view = name;
+    this.context.replaceChildren(...(options.context ? [options.context] : []));
+    this.actions.replaceChildren(...(options.actions ? [options.actions] : []));
+    this.rerender = options.rerender;
+    document.title = title;
+    // A language switch keeps the reader where they were; a new view starts at the top.
+    window.scrollTo(0, this.relocalizing ? scrollY : 0);
+  }
+
+  // ---------- drag & drop ----------
+
+  private installDragAndDrop(): void {
+    const hasFiles = (event: DragEvent) => !!event.dataTransfer && Array.from(event.dataTransfer.types).includes('Files');
+    window.addEventListener('dragenter', (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      this.dragDepth++;
+      this.setDragging(true);
+    });
+    window.addEventListener('dragover', (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = this.canDrop() ? 'copy' : 'none';
+    });
+    window.addEventListener('dragleave', (event) => {
+      if (!hasFiles(event)) return;
+      this.dragDepth = Math.max(0, this.dragDepth - 1);
+      if (this.dragDepth === 0) this.setDragging(false);
+    });
+    window.addEventListener('drop', (event) => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      this.dragDepth = 0;
+      this.setDragging(false);
+      this.onDrop(event);
+    });
+  }
+
+  private canDrop(): boolean {
+    return this.support === 'picker' && this.shell.dataset.view !== 'scan';
+  }
+
+  private setDragging(on: boolean): void {
+    const show = on && this.canDrop();
+    if (this.startView) this.startView.setDragOver(show);
+    else this.dropOverlay.hidden = !show;
+  }
+
+  private onDrop(event: DragEvent): void {
+    if (this.shell.dataset.view === 'scan') {
+      toast(t.drop.busy, 'info');
+      return;
+    }
+    // Must run synchronously inside the drop handler.
+    const pending = this.support === 'picker' ? dirHandleFromDrop(event) : null;
+    if (!pending) {
+      toast(this.support === 'picker' ? t.drop.notFolder : t.drop.unsupported, 'info', 5000);
+      return;
+    }
+    pending.then(
+      (handle) => {
+        if (handle) void this.scanHandle(handle);
+        else toast(t.drop.singleFile, 'info', 5000);
+      },
+      () => toast(t.drop.openFailed, 'alert', 5000),
+    );
+  }
+}
+
+/** The browser's own wording when it gives one (often English), else ours. */
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message || t.errors.scanFailed;
+  return String(error) || t.errors.scanFailed;
+}

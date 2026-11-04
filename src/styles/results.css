@@ -1,0 +1,584 @@
+/* Results: summary strip, notes, the two-pane workspace, breadcrumb and tabs. */
+
+@media (min-width: 1100px) {
+  .app[data-view="results"] {
+    height: 100dvh;
+    min-height: 660px;
+  }
+}
+
+.view--results {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px clamp(12px, 1.6vw, 22px) 10px;
+}
+
+.view--results > h1:focus {
+  outline: none;
+}
+
+/* ---------- Summary strip (field book) ---------- */
+
+.summary__cells {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.summary__cell {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 10px 20px;
+  border-right: 1px solid var(--line);
+}
+
+.summary__value {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.summary__cell--hero .summary__value {
+  font-size: 26px;
+  letter-spacing: -0.02em;
+}
+
+.summary__cell--warn .label {
+  color: var(--warn);
+}
+
+.summary__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  text-align: left;
+}
+
+.summary__toggle svg {
+  width: 14px;
+  height: 14px;
+  color: var(--warn);
+}
+
+.summary__toggle .summary__caret {
+  color: var(--ink-2);
+  transition: transform 150ms var(--ease);
+}
+
+.summary__toggle[aria-expanded="true"] .summary__caret {
+  transform: rotate(180deg);
+}
+
+.summary__short {
+  display: none;
+}
+
+.summary__toggle:hover .num {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.summary__when {
+  align-self: center;
+  margin-left: auto;
+  padding: 8px 20px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.summary__explain {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-left: 2px solid var(--warn);
+  background: var(--panel);
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.summary__explain p {
+  max-width: 80em;
+}
+
+/* ---------- Notes ---------- */
+
+.banners {
+  display: grid;
+  gap: 8px;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px 9px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink-2);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 13.5px;
+}
+
+.banner--warn {
+  border-color: var(--warn-line);
+  border-left-color: var(--warn);
+  background: var(--warn-wash);
+}
+
+.banner__icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-2);
+}
+
+.banner--warn .banner__icon {
+  color: var(--warn);
+}
+
+.banner__text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-2);
+}
+
+.banner__text strong {
+  color: var(--ink);
+  font-weight: 640;
+}
+
+.banner .btn {
+  flex: none;
+}
+
+/* ---------- Workspace ---------- */
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+}
+
+.workspace[data-layout="split"] {
+  grid-template-columns: minmax(340px, var(--split, 46%)) 12px minmax(480px, 1fr);
+}
+
+.workspace[data-layout="tabs"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace[data-layout="tabs"] .splitter {
+  display: none;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.tabpanel--tree > .pane--tree {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+}
+
+.splitter {
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.splitter::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--line-strong);
+  transform: translate(-50%, -50%);
+  transition: background-color 120ms var(--ease), height 160ms var(--ease);
+}
+
+.splitter:hover::before,
+.splitter.is-dragging::before {
+  height: 64px;
+  background: var(--ink-2);
+}
+
+.splitter:focus-visible {
+  outline: none;
+}
+
+.splitter:focus-visible::before {
+  height: 64px;
+  background: var(--accent);
+}
+
+/* The stats wrap onto a second line before the breadcrumb has to shorten any name. */
+.pane__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 6px 12px 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.crumbs {
+  display: flex;
+  flex: 1 1 auto;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crumbs__up svg {
+  width: 16px;
+  height: 16px;
+}
+
+.crumbs__list {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Earlier segments give way first; the current folder keeps its name as long as possible. */
+.crumbs__item {
+  display: flex;
+  flex: 0 100 auto;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumbs__item + .crumbs__item::before {
+  content: "›";
+  flex: none;
+  padding: 0 4px;
+  color: var(--muted);
+}
+
+.crumbs__link {
+  min-width: 3ch;
+  max-width: 20ch;
+  overflow: hidden;
+  padding: 4px 5px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumbs__link:hover {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+
+.crumbs__item--more {
+  flex-shrink: 0;
+}
+
+.crumbs__more {
+  min-width: 0;
+  padding-inline: 8px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+.crumbs__item--last {
+  flex: 0 1 auto;
+  min-width: min(100%, 6ch);
+}
+
+.crumbs__current {
+  overflow: hidden;
+  padding: 4px 5px;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumbs__stats {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 580;
+  white-space: nowrap;
+  transition: color 120ms var(--ease);
+}
+
+.tab[hidden] {
+  display: none;
+}
+
+.tab svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tab::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 180ms var(--ease);
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab[aria-selected="true"]::after {
+  transform: scaleX(1);
+}
+
+.tab:focus-visible {
+  outline-offset: -5px;
+}
+
+.tab__short {
+  display: none;
+}
+
+/* Tab labels follow the pane's own width (it changes with the divider), not the window's. */
+.pane--main {
+  container: panemain / inline-size;
+}
+
+@container panemain (max-width: 560px) {
+  .tab__long {
+    display: none;
+  }
+  .tab__short {
+    display: inline;
+  }
+  .tab {
+    gap: 6px;
+    padding: 0 9px;
+  }
+  .tab svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+/* The narrow layout has a fifth tab (Ordner): its long labels need about 575 px. */
+@container panemain (max-width: 600px) {
+  .workspace[data-layout="tabs"] .tab__long {
+    display: none;
+  }
+  .workspace[data-layout="tabs"] .tab__short {
+    display: inline;
+  }
+  .workspace[data-layout="tabs"] .tab {
+    gap: 6px;
+    padding: 0 9px;
+  }
+  .workspace[data-layout="tabs"] .tab svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@container panemain (max-width: 440px) {
+  .workspace[data-layout="tabs"] .tabs {
+    padding: 0 4px;
+  }
+  .workspace[data-layout="tabs"] .tab {
+    padding: 0 7px;
+    font-size: 13px;
+  }
+  .workspace[data-layout="tabs"] .tab svg {
+    display: none;
+  }
+}
+
+@container panemain (max-width: 380px) {
+  .tabs {
+    padding: 0 4px;
+  }
+  .tab {
+    padding: 0 7px;
+    font-size: 13px;
+  }
+  .tab svg {
+    display: none;
+  }
+}
+
+.tabpanels {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tabpanel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.tabpanel[hidden] {
+  display: none;
+}
+
+.tabpanel--top,
+.tabpanel--types,
+.tabpanel--age {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.tabpanel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+@media (max-width: 1099px) {
+  .workspace {
+    flex: none;
+    height: max(560px, calc(100dvh - 20px));
+  }
+}
+
+@media (max-width: 640px) {
+  .view--results {
+    padding-inline: 10px;
+  }
+  .summary__cell {
+    flex: 1 1 40%;
+    padding: 9px 12px;
+  }
+  .summary__cell--hero {
+    flex-basis: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .summary__when {
+    flex-basis: 100%;
+    margin-left: 0;
+    padding: 6px 12px 8px;
+    border-top: 1px solid var(--line);
+  }
+  .banner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .banner__text {
+    flex-basis: calc(100% - 32px);
+  }
+  .banner .btn {
+    margin-left: 30px;
+  }
+  .pane__bar {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+  }
+  .crumbs__stats {
+    width: 100%;
+    padding-left: 38px;
+  }
+  .summary__long,
+  .summary__toggle > svg:first-child {
+    display: none;
+  }
+  .summary__short {
+    display: inline;
+  }
+}
+
+/* ---------- Empty state ---------- */
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin: clamp(24px, 8vh, 80px) auto;
+  max-width: 520px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.empty-state__icon {
+  width: 40px;
+  height: 40px;
+  color: var(--ink-2);
+}
+
+.empty-state__title {
+  font-size: 22px;
+  font-weight: 680;
+}
+
+.empty-state__text {
+  color: var(--ink-2);
+}

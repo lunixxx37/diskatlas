@@ -1,0 +1,377 @@
+/* Tab panels: largest files, file types, file age. */
+
+.panel {
+  container: panel / inline-size;
+  padding: 16px clamp(14px, 1.8vw, 22px) 26px;
+}
+
+.panel__intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.panel__title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* The folder name in a panel title, in the quotation marks of the page's language. */
+.panel__where::before {
+  content: "“";
+}
+
+.panel__where::after {
+  content: "”";
+}
+
+.panel__where:lang(de)::before {
+  content: "„";
+}
+
+.panel__where:lang(de)::after {
+  content: "“";
+}
+
+.panel__lede {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.panel__empty {
+  padding: 48px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.panel__section + .panel__section {
+  margin-top: 26px;
+}
+
+.panel__section > .label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.panel__note {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.panel__more {
+  margin-top: 12px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ---------- Tables ---------- */
+
+.datatable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.datatable th,
+.datatable td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.datatable thead th {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--panel);
+  border-bottom-color: var(--line-strong);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.datatable tbody th {
+  font-weight: 560;
+}
+
+.datatable .c-num,
+.datatable .c-rank,
+.datatable .c-date {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.datatable tbody tr:hover {
+  background: var(--panel-2);
+}
+
+.datatable--files tbody tr {
+  cursor: pointer;
+}
+
+.datatable .c-rank {
+  width: 3.4em;
+  color: var(--muted);
+}
+
+.datatable .c-num {
+  width: 86px;
+}
+
+.datatable .c-count {
+  width: 80px;
+}
+
+.datatable .c-share {
+  width: 128px;
+  white-space: nowrap;
+}
+
+.datatable .c-share .share {
+  display: inline-block;
+  width: calc(100% - 50px);
+  vertical-align: middle;
+}
+
+.datatable .c-share .share__pct {
+  display: inline-block;
+  width: 46px;
+  vertical-align: middle;
+}
+
+.datatable .c-folder {
+  width: 24%;
+}
+
+.datatable .c-date {
+  width: 92px;
+  color: var(--ink-2);
+}
+
+.datatable .c-folder .mtrunc {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
+.datatable .c-label,
+.datatable .c-cat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.datatable--ext .c-ext {
+  width: 22%;
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.cell-name__button {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-weight: 560;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-name__button:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.cell-sub {
+  display: none;
+  margin: 2px 0 0 19px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--cat);
+  vertical-align: -1px;
+}
+
+.cell-name .swatch {
+  margin-right: 0;
+}
+
+@container panel (max-width: 640px) {
+  .datatable--files .c-folder,
+  .datatable--files .c-date {
+    display: none;
+  }
+  .cell-sub {
+    display: block;
+  }
+}
+
+@container panel (max-width: 460px) {
+  .datatable--files .c-share,
+  .datatable--cats .c-count,
+  .datatable--ext .c-cat {
+    display: none;
+  }
+  .datatable .c-rank {
+    width: 2.6em;
+  }
+  .datatable th,
+  .datatable td {
+    padding-inline: 6px;
+  }
+  .datatable .c-share {
+    width: 112px;
+  }
+}
+
+/* ---------- Part-to-whole bar ---------- */
+
+.propbar {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  margin-bottom: 14px;
+}
+
+.propbar__seg {
+  flex-basis: 0;
+  min-width: 2px;
+  background: var(--cat);
+  transition: opacity 120ms var(--ease);
+}
+
+.propbar__seg:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.propbar__seg:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.propbar__seg:only-child {
+  border-radius: 4px;
+}
+
+.propbar:hover .propbar__seg:not(:hover) {
+  opacity: 0.45;
+}
+
+/* ---------- Age ---------- */
+
+.insight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+  margin: 4px 0 22px;
+  padding: 14px 18px;
+  border-left: 3px solid var(--age-5);
+  background: var(--panel-2);
+  font-size: clamp(16px, 1.5vw, 19px);
+  font-weight: 580;
+  line-height: 1.35;
+}
+
+.insight__bytes {
+  color: var(--ink-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agechart {
+  display: grid;
+  gap: 2px;
+}
+
+.agechart__row {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  min-height: 34px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.agechart__row:not(.agechart__row--head):hover {
+  background: var(--panel-2);
+}
+
+.agechart__row--head {
+  min-height: 26px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.agechart__label {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.agechart__cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.agechart__bar {
+  flex: none;
+  width: calc((100% - 78px) * var(--w, 0));
+  height: 16px;
+  border-radius: 0 4px 4px 0;
+  background: var(--bar);
+}
+
+.agechart__value {
+  flex: none;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+@container panel (max-width: 460px) {
+  .agechart__row {
+    grid-template-columns: minmax(78px, 96px) minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .agechart__bar {
+    width: calc((100% - 62px) * var(--w, 0));
+  }
+}
