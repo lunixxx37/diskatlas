@@ -49,6 +49,9 @@ jobs:
         env:
           # Lets the Windows tests move a temp file to the runner's Recycle Bin.
           DISKATLAS_TEST_RECYCLE: '1'
+      - name: Icon, version information and manifest
+        if: runner.os == 'Windows'
+        run: go run github.com/tc-hib/go-winres@v0.3.3 make --in winres/winres.json --arch amd64 --product-version "0.0.0.${{ github.run_number }}" --file-version "0.0.0.${{ github.run_number }}"
       - name: Build DiskAtlas-Helper.exe
         if: runner.os == 'Windows'
         run: go build -trimpath -ldflags "-H=windowsgui -s -w -X main.version=0.1.0-ci.${{ github.run_number }}" -o bin/DiskAtlas-Helper.exe .
