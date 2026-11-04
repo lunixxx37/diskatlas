@@ -79,6 +79,9 @@ type serverConfig struct {
 	workers     int
 	elevateArgs []string     // arguments for the elevated instance
 	exit        func(string) // asks the helper to shut down, with a reason for the log
+	// linkChanged: this run created or changed the diskatlas-helper:// link,
+	// so browsers that were already running can't open it before a restart.
+	linkChanged bool
 	// cleanup (recycle and delete) and reveal are the clean-up actions; nil
 	// where the system has none (then /v1/info doesn't list them and their
 	// endpoints are unknown).
@@ -267,6 +270,7 @@ type infoJSON struct {
 	PID                int      `json:"pid"`
 	IdleTimeoutSeconds int64    `json:"idleTimeoutSeconds"`
 	Features           []string `json:"features"`
+	LinkChanged        bool     `json:"linkChanged"`
 }
 
 func (s *server) handleInfo(w http.ResponseWriter) {
@@ -280,6 +284,7 @@ func (s *server) handleInfo(w http.ResponseWriter) {
 		PID:                os.Getpid(),
 		IdleTimeoutSeconds: int64(s.idle / time.Second),
 		Features:           s.features(),
+		LinkChanged:        s.linkChanged,
 	})
 }
 

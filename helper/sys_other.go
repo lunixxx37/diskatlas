@@ -21,7 +21,7 @@ func listDrives() []drive {
 	return []drive{{Path: "/", Type: "fixed", Ready: true}}
 }
 
-func registerProtocol(string) error { return nil }
+func registerProtocol(string) (bool, error) { return false, nil }
 
 func unregisterProtocol() error { return nil }
 

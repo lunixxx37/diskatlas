@@ -97,11 +97,18 @@ Any 4xx or 5xx response from an allowed origin has this JSON body:
   "elevated": false,
   "pid": 4242,
   "idleTimeoutSeconds": 600,
-  "features": ["scan", "pick", "reveal", "recycle", "delete"]
+  "features": ["scan", "pick", "reveal", "recycle", "delete"],
+  "linkChanged": false
 }
 ```
 
 The website treats a server as the helper only if `app` is `"diskatlas-helper"` and `protocol` is `1`. It offers an action only if `features` lists it. A helper without `features` counts as `["scan"]`.
+
+`linkChanged` is `true` when this run of the helper created the `diskatlas-helper://` link or changed it.
+
+- Browsers that were already running then can't open the link yet. Tests with Chrome and Edge showed this: until they are restarted, they report "the scheme does not have a registered handler" and ask nothing.
+- Telling Windows about the change (`SHChangeNotify` with `SHCNE_ASSOCCHANGED`, which the helper does) doesn't change that.
+- The website then recommends restarting the browser once.
 
 ### `GET /v1/drives`
 

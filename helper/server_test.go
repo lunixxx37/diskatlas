@@ -246,9 +246,14 @@ func TestInfo(t *testing.T) {
 		"pid":                float64(os.Getpid()),
 		"idleTimeoutSeconds": float64(600),
 		"features":           []any{"scan"}, // no clean-up actions configured
+		"linkChanged":        false,
 	}
 	if !reflect.DeepEqual(v, want) {
 		t.Errorf("info = %v\nwant %v", v, want)
+	}
+	changed := newTestHelper(t, serverConfig{linkChanged: true})
+	if v := changed.call("GET", "/v1/info", "", http.StatusOK); v["linkChanged"] != true {
+		t.Errorf("linkChanged: %v", v)
 	}
 	h.sys.set(func(f *fakeSystem) { f.isElevated = true })
 	if v := h.call("GET", "/v1/info", "", http.StatusOK); v["elevated"] != true {

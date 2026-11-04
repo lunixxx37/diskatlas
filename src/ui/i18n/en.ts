@@ -147,7 +147,7 @@ export const en = {
     notFound: "The helper isn't running.",
     notFoundText: "Start it, or download it first if it isn't on this PC yet.",
     lost: 'The connection to the helper was lost. It quits by itself after a while without use; start it again.',
-    stillNotFound: "Still no answer. Didn't see your browser's question? Start DiskAtlas-Helper.exe yourself with a double-click; this page connects as soon as it runs.",
+    stillNotFound: "Still no answer. Didn't see your browser's question? Start DiskAtlas-Helper.exe yourself with a double-click; this page connects as soon as it runs. If the helper is new on this PC, restart your browser once: until then it doesn't know the helper's link.",
     start: 'Start helper',
     download: 'Download for Windows',
     retry: 'Try again',
@@ -179,6 +179,8 @@ export const en = {
     quit: 'Quit helper',
     /** Next to "Quit helper" while it runs as administrator. */
     quitElevated: "As administrator, the helper can also list protected folders. Quit it when you're done.",
+    /** While connected, when this run of the helper has just set up its link. */
+    restartBrowser: 'Tip: restart your browser once. Browsers only learn about the helper\'s link when they start, so "Start helper" works from this page only after that.',
     /** The title of Windows' folder dialog. */
     pickTitle: 'Choose a folder to survey',
     pickBusy: "Windows' folder dialog is already open. It may be behind the browser window.",

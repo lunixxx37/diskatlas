@@ -139,9 +139,14 @@ func serve(opts options, logger *log.Logger) int {
 	}
 	ln = requireSameUser(ln, owners, self, logger)
 
+	linkChanged := false
 	if mode != modeServe {
-		if err := registerLink(opts); err != nil {
+		changed, err := registerLink(opts)
+		if err != nil {
 			logger.Printf("error: could not register the %s:// link: %v", protocolScheme, err)
+		} else if changed {
+			linkChanged = true
+			logger.Printf("registered the %s:// link (new or changed; browsers that are already running need a restart to see it)", protocolScheme)
 		} else {
 			logger.Printf("registered the %s:// link", protocolScheme)
 		}
@@ -163,6 +168,7 @@ func serve(opts options, logger *log.Logger) int {
 		idle:        opts.idle,
 		logger:      logger,
 		elevateArgs: elevatedArgs(opts, port),
+		linkChanged: linkChanged,
 		cleanup:     platformCleanup(),
 		pick:        platformPick(),
 		reveal:      platformReveal(),
@@ -243,11 +249,12 @@ func openWebsite(opts options, logger *log.Logger) {
 }
 
 // registerLink registers the diskatlas-helper:// link for this program,
-// keeping this run's --dev and --origin flags.
-func registerLink(opts options) error {
+// keeping this run's --dev and --origin flags. changed reports whether the
+// registration was new or different before.
+func registerLink(opts options) (changed bool, err error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return err
+		return false, err
 	}
 	return registerProtocol(protocolCommand(exe, opts))
 }

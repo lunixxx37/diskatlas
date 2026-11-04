@@ -250,28 +250,67 @@ func queryDrive(d drive) drive {
 // are needed.
 const linkKey = `Software\Classes\` + protocolScheme
 
-func registerProtocol(command string) error {
+// registerProtocol writes the link registration. changed reports whether it
+// was missing or pointed to another command before: browsers that were already
+// running then don't know the link until they restart, as tests with Chrome and
+// Edge showed.
+func registerProtocol(command string) (changed bool, err error) {
+	changed = registeredCommand() != command
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, linkKey, registry.SET_VALUE)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer k.Close()
 	if err := k.SetStringValue("", "URL:DiskAtlas Helper"); err != nil {
-		return err
+		return false, err
 	}
 	if err := k.SetStringValue("URL Protocol", ""); err != nil {
-		return err
+		return false, err
 	}
 	c, _, err := registry.CreateKey(registry.CURRENT_USER, linkKey+`\shell\open\command`, registry.SET_VALUE)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer c.Close()
-	return c.SetStringValue("", command)
+	if err := c.SetStringValue("", command); err != nil {
+		return false, err
+	}
+	if changed {
+		notifyAssociationsChanged()
+	}
+	return changed, nil
+}
+
+// registeredCommand is the command the link starts now, or "" if there is none.
+func registeredCommand() string {
+	c, err := registry.OpenKey(registry.CURRENT_USER, linkKey+`\shell\open\command`, registry.QUERY_VALUE)
+	if err != nil {
+		return ""
+	}
+	defer c.Close()
+	command, _, err := c.GetStringValue("")
+	if err != nil {
+		return ""
+	}
+	return command
 }
 
 func unregisterProtocol() error {
-	return deleteKeyTree(registry.CURRENT_USER, linkKey)
+	if err := deleteKeyTree(registry.CURRENT_USER, linkKey); err != nil {
+		return err
+	}
+	notifyAssociationsChanged()
+	return nil
+}
+
+var procSHChangeNotify = modshell32.NewProc("SHChangeNotify")
+
+// notifyAssociationsChanged tells Windows and running programs that a link
+// registration changed, as Windows asks registering programs to do. Running
+// browsers still need a restart to see a new link.
+func notifyAssociationsChanged() {
+	const shcneAssocChanged, shcnfIDList = 0x08000000, 0
+	procSHChangeNotify.Call(shcneAssocChanged, shcnfIDList, 0, 0)
 }
 
 // deleteKeyTree deletes a registry key with all its subkeys. A missing key

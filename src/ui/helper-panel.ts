@@ -5,6 +5,9 @@ import type { HelperLink } from './helper-link';
 import { t } from './i18n';
 import { icon, type IconName } from './icons';
 
+/** How long "Start helper" leaves the browser alone to follow the link before looking. */
+const START_LOOK_DELAY_MS = 600;
+
 /**
  * The start page's section for whole drives and system folders: connect to the DiskAtlas
  * Helper, then survey a drive or any folder. It draws whatever state the HelperLink is in,
@@ -126,8 +129,12 @@ export class HelperPanel {
     const { link } = this;
     const waiting = link.status === 'waiting';
     const start = h('a', { class: 'btn btn--primary', href: HELPER_START_URL, 'data-focus': 'start' }, icon('power'), t.helper.start);
-    // The browser asks whether to open the helper; meanwhile look for it.
-    start.addEventListener('click', () => void link.startAndWait());
+    // The browser asks whether to open the helper; meanwhile look for it. Start looking only a
+    // moment later, so the browser follows the link before this section is redrawn (which
+    // replaces the link) and before the first request to the helper goes out.
+    start.addEventListener('click', () => {
+      window.setTimeout(() => void link.startAndWait(), START_LOOK_DELAY_MS);
+    });
     const download = h('a', { class: 'btn btn--secondary', href: HELPER_DOWNLOAD_URL, 'data-focus': 'download' }, icon('download'), t.helper.download);
     const headline =
       link.note === 'lost' ? t.helper.lost : link.note === 'still-not-found' ? t.helper.stillNotFound : link.note === 'elevate-failed' ? t.helper.elevateFailed : t.helper.notFound;
@@ -180,6 +187,8 @@ export class HelperPanel {
     if (!link.elevated && !elevating) notes.push(fine('shield', t.helper.elevateNote));
     // As administrator it can list protected folders for any program of this user: quit it when done.
     if (link.elevated && !elevating) notes.push(fine('power', t.helper.quitElevated));
+    // A browser that was already running when the link was set up doesn't know it yet.
+    if (link.client?.info.linkChanged && !elevating) notes.push(fine('info', t.helper.restartBrowser));
     return [head, ...notes, this.driveList(elevating), this.pathForm(elevating)];
   }
 
