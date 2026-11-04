@@ -50,6 +50,7 @@ const PATHS = {
   /** Delete permanently: the bin, crossed out inside. */
   trashX: ['M4.5 7h15', 'M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2', 'M6.5 7l1 12a1.5 1.5 0 0 0 1.5 1.4h6a1.5 1.5 0 0 0 1.5-1.4l1-12', 'M9.8 11.3l4.4 4.4M14.2 11.3l-4.4 4.4'],
   home: ['M3.5 11L12 4l8.5 7', 'M6 9.2V19a1 1 0 0 0 1 1h3.5v-5.5h3V20H17a1 1 0 0 0 1-1V9.2'],
+  minus: ['M6.5 12h11'],
 } as const;
 
 export type IconName = keyof typeof PATHS;

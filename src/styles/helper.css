@@ -345,6 +345,168 @@
   }
 }
 
+/* ---------- What the helper adds: the comparison under the section ---------- */
+
+.helper > .cmp {
+  grid-column: 1 / -1;
+}
+
+.cmp {
+  min-width: 0;
+  margin-top: 6px;
+}
+
+.cmp__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.cmp__caption {
+  caption-side: top;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 680;
+  text-align: left;
+}
+
+.cmp__col {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-strong);
+  text-align: left;
+  vertical-align: bottom;
+}
+
+.cmp__col-name {
+  display: block;
+  color: var(--ink);
+  font-weight: 640;
+}
+
+.cmp__col-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.cmp__what,
+.cmp__cell {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cmp__what {
+  width: 44%;
+  color: var(--ink);
+  font-weight: 560;
+}
+
+/* The helper's column, a shade apart. */
+.cmp__col--helper,
+.cmp__row > .cmp__cell:last-child {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.cmp__value {
+  display: grid;
+  gap: 2px;
+}
+
+.cmp__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.cmp__mark svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.cmp__mark--yes {
+  color: var(--ink);
+}
+
+.cmp__mark--yes svg {
+  color: var(--ok);
+}
+
+/* "No" stays neutral: a dash, the word, a short reason. */
+.cmp__mark--no {
+  color: var(--ink-2);
+}
+
+.cmp__mark--no svg {
+  color: var(--muted);
+}
+
+.cmp__note {
+  padding-left: 21px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.cmp__text {
+  color: var(--ink);
+}
+
+.cmp__foot {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Phones: one block per row, each value with its column's name in front. */
+@media (max-width: 640px) {
+  .cmp__table,
+  .cmp__table tbody,
+  .cmp__row,
+  .cmp__what,
+  .cmp__cell {
+    display: block;
+  }
+  .cmp__caption {
+    display: block;
+  }
+  .cmp__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .cmp__row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .cmp__what {
+    width: auto;
+    padding: 0 0 6px;
+    border: 0;
+  }
+  .cmp__cell,
+  .cmp__row > .cmp__cell:last-child {
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 10px;
+    padding: 3px 0;
+    border: 0;
+    background: none;
+  }
+  .cmp__cell::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 13px;
+  }
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

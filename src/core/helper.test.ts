@@ -199,6 +199,26 @@ describe('reveal and recycle', () => {
     expect(hasFeature(null, 'scan')).toBe(false);
   });
 
+  it("asks for Windows' folder dialog with a title and no timeout", async () => {
+    const answers = [{ path: 'C:\\' }, { cancelled: true }, {}];
+    const page = fakePage({ [url(PORT, '/pick-folder')]: () => json(answers.shift()) });
+    const client = new HelperClient(PORT, { ...INFO, features: ['scan', 'pick'] }, page.env);
+    expect(await client.pickFolder('Choose a folder to survey')).toBe('C:\\');
+    expect(await client.pickFolder('Ordner zum Vermessen auswählen', 'D:\\Games')).toBeNull();
+    expect((await failure(client.pickFolder('x'))).kind).toBe('wrong-server');
+    const [first, second] = page.calls;
+    expect([first.init.method, first.init.headers, first.init.signal, first.init.targetAddressSpace]).toEqual(['POST', undefined, undefined, 'loopback']);
+    expect(JSON.parse(first.init.body as string)).toEqual({ title: 'Choose a folder to survey' });
+    expect(JSON.parse(second.init.body as string)).toEqual({ title: 'Ordner zum Vermessen auswählen', startPath: 'D:\\Games' });
+  });
+
+  it('reports a dialog that is already open as busy', async () => {
+    const page = fakePage({ [url(PORT, '/pick-folder')]: () => json({ error: { code: 'busy', message: 'A folder dialog is already open.' } }, 409) });
+    const error = await failure(new HelperClient(PORT, INFO, page.env).pickFolder('x'));
+    expect([error.kind, error.status, error.code]).toEqual(['http', 409, 'busy']);
+    expect(hasFeature({ features: ['scan', 'pick'] }, 'pick')).toBe(true);
+  });
+
   it('reveals an item with a simple POST', async () => {
     const page = fakePage({ [url(PORT, '/reveal')]: () => json({}) });
     await new HelperClient(PORT, INFO, page.env).reveal(item.path);

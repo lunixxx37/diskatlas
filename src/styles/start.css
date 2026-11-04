@@ -154,6 +154,54 @@
   font-size: 14px;
 }
 
+/* Under the drop zone: how "Choose folder" picks (the helper's dialog or the browser's). */
+.start__via {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.start__via[hidden] {
+  display: none;
+}
+
+.start__via-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.start__via-line > svg {
+  flex: none;
+  align-self: center;
+  width: 15px;
+  height: 15px;
+  color: var(--ink-2);
+}
+
+.start__via-line--helper {
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.start__via-line--helper > svg {
+  color: var(--ok);
+}
+
+.start__via-line .linklike {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.start__via-line--fine {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .start__secondary {
   display: flex;
   flex-wrap: wrap;

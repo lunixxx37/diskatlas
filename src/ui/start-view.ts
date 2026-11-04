@@ -12,7 +12,10 @@ export type Support = 'picker' | 'files' | 'none';
 
 export interface StartViewOptions {
   support: Support;
+  /** "Choose folder": through the helper when it offers Windows' folder dialog, else the browser's picker. */
   onPick: () => void;
+  /** "Choose in the browser instead", while the helper would pick. */
+  onPickInBrowser?: () => void;
   onDemo: () => void;
   /** Open "Good to know" right away (it was open before the language changed). */
   knowOpen?: boolean;
@@ -28,6 +31,12 @@ export class StartView {
   private readonly zone: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly idleHint: string;
+  private readonly pickButton: HTMLButtonElement;
+  /** Under the drop zone: how "Choose folder" picks (helper or browser), and the fallback. */
+  private readonly via: HTMLElement;
+  private readonly link: HelperLink | null;
+  private readonly support: Support;
+  private readonly onPickInBrowser: (() => void) | null;
   private readonly know: HTMLDetailsElement;
   private readonly helper: HelperPanel | null;
   private lastCard: LastResultCard | null = null;
@@ -35,15 +44,15 @@ export class StartView {
 
   constructor(options: StartViewOptions) {
     const { support } = options;
+    this.support = support;
+    this.link = options.helper?.link ?? null;
+    this.onPickInBrowser = options.onPickInBrowser ?? null;
     this.idleHint = support === 'picker' ? t.start.dragHint : t.start.pickHint;
 
-    const pickButton = h(
-      'button',
-      { class: 'btn btn--primary btn--lg', type: 'button', disabled: support === 'none' },
-      icon('folderOpen'),
-      t.start.pick,
-    );
+    const pickButton = h('button', { class: 'btn btn--primary btn--lg', type: 'button', disabled: support === 'none' });
     pickButton.addEventListener('click', options.onPick);
+    this.pickButton = pickButton;
+    this.via = h('div', { class: 'start__via', 'aria-live': 'polite' });
 
     this.hint = h('p', { class: 'dropzone__hint', text: this.idleHint });
     this.zone = h(
@@ -62,6 +71,7 @@ export class StartView {
       h('h1', { class: 'start__title', tabindex: '-1' }, t.start.title),
       h('p', { class: 'start__lede' }, t.start.lede(APP_NAME)),
       this.zone,
+      this.via,
       h('div', { class: 'start__secondary' }, demoButton, h('p', { class: 'start__fine', text: t.start.fine })),
       supportNote(support),
     );
@@ -88,6 +98,42 @@ export class StartView {
     intro.querySelector('h1')!.id = 'start-title';
     this.onOpenLast = options.onOpenLast ?? null;
     if (options.last) this.setLast(options.last);
+    this.renderPicker();
+    this.link?.addEventListener('change', this.onLinkChange);
+  }
+
+  private readonly onLinkChange = (): void => this.renderPicker();
+
+  /**
+   * "Choose folder" and the line under the drop zone follow the helper: with it connected,
+   * Windows' folder dialog (drives and system folders too) and a way back to the browser's
+   * picker; without it, on Windows, a pointer to the helper for whole drives.
+   */
+  private renderPicker(): void {
+    const link = this.link;
+    const viaHelper = !!link?.canPick;
+    const picking = viaHelper && link!.picking;
+    this.pickButton.disabled = this.support === 'none' && !viaHelper;
+    this.pickButton.setAttribute('aria-busy', String(picking));
+    this.pickButton.replaceChildren(...(picking ? [h('span', { class: 'spinner', 'aria-hidden': 'true' }), t.start.picking] : [icon('folderOpen'), t.start.pick]));
+    const lines: HTMLElement[] = [];
+    if (picking) {
+      lines.push(h('p', { class: 'start__via-line' }, icon('info'), h('span', { text: t.start.pickingHint })));
+    } else if (viaHelper) {
+      const line = h('p', { class: 'start__via-line start__via-line--helper' }, icon('plug'), h('span', { text: t.start.viaHelper }));
+      if (this.support !== 'none' && this.onPickInBrowser) {
+        const browser = h('button', { class: 'linklike', type: 'button', text: t.start.pickInBrowser });
+        browser.addEventListener('click', this.onPickInBrowser);
+        line.append(browser);
+      }
+      lines.push(line);
+      if (this.support === 'picker') lines.push(h('p', { class: 'start__via-line start__via-line--fine', text: t.start.dragViaBrowser }));
+    } else if (link) {
+      // Windows, helper not connected: say where whole drives come from before the browser refuses them.
+      lines.push(h('p', { class: 'start__via-line' }, icon('info'), h('span', null, t.start.helperOffer, ' '), h('a', { class: 'linklike', href: '#helper', text: t.start.helperOfferLink })));
+    }
+    this.via.replaceChildren(...lines);
+    this.via.hidden = lines.length === 0;
   }
 
   /** Shows (or updates, or with null removes) the card for the result still in memory. */
@@ -128,6 +174,7 @@ export class StartView {
   destroy(): void {
     this.helper?.destroy();
     this.lastCard?.destroy();
+    this.link?.removeEventListener('change', this.onLinkChange);
   }
 }
 

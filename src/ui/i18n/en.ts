@@ -77,6 +77,16 @@ export const en = {
     title: "See what's filling your storage.",
     lede: (app: string) => `Choose a folder or a drive. ${app} surveys it right in your browser; nothing is uploaded.`,
     pick: 'Choose folder',
+    /** While Windows' folder dialog (through the helper) is open. */
+    picking: 'Folder dialog open …',
+    pickingHint: "Windows' folder dialog is open. If you don't see it, it may be behind the browser window.",
+    /** Under "Choose folder" while the helper picks. */
+    viaHelper: 'Through the helper: also C:\\ and system folders.',
+    pickInBrowser: 'Choose in the browser instead',
+    dragViaBrowser: 'Dragged folders are read by the browser: whole drives only through “Choose folder” or the drive list below.',
+    /** Windows, helper not connected: before the browser refuses a drive. */
+    helperOffer: 'Whole drives like C:\\ and system folders:',
+    helperOfferLink: 'use the DiskAtlas Helper below.',
     dragHint: '…or drag a folder here',
     pickHint: 'A drive like D: or a folder like “Games”',
     dropHint: 'Release to survey',
@@ -169,6 +179,34 @@ export const en = {
     quit: 'Quit helper',
     /** Next to "Quit helper" while it runs as administrator. */
     quitElevated: "As administrator, the helper can also list protected folders. Quit it when you're done.",
+    /** The title of Windows' folder dialog. */
+    pickTitle: 'Choose a folder to survey',
+    pickBusy: "Windows' folder dialog is already open. It may be behind the browser window.",
+    pickFailed: (message: string) => `The folder dialog didn't work: ${message}`,
+    /** The comparison under the helper section: the browser alone, and with the helper. */
+    compare: {
+      caption: 'What the helper adds',
+      feature: 'Feature',
+      browser: 'Without the helper',
+      browserSub: 'in the browser only',
+      helper: 'With the helper',
+      helperSub: 'on Windows',
+      yes: 'Yes',
+      no: 'No',
+      footnote: 'While surveying, both only read names, sizes and dates, never what is inside the files.',
+      rows: {
+        own: { what: 'Your own folders and other drives, such as D:\\', browser: '', helper: '' },
+        drives: { what: 'Whole drives such as C:\\, and Windows, Program Files or AppData', browser: 'the browser blocks them', helper: '' },
+        dialog: { what: 'Folder dialog', browser: "the browser's own", helper: "Windows' own, for any folder" },
+        views: { what: 'Folder tree, map, largest files, file types, file age, duplicates, CSV export', browser: '', helper: '' },
+        onDisk: { what: 'Size on disk (“On disk”)', browser: '', helper: '' },
+        marks: { what: 'Links and OneDrive online-only files marked as such', browser: '', helper: '' },
+        admin: { what: 'Protected folders, as administrator', browser: '', helper: 'after Windows asks' },
+        explorer: { what: 'Show in Explorer', browser: '', helper: '' },
+        cleanup: { what: 'Move to the Recycle Bin, delete permanently', browser: 'the browser only reads', helper: 'after you confirm' },
+        install: { what: 'Installation', browser: 'none', helper: 'a small program without a window' },
+      },
+    },
     drives: 'Drives',
     loadingDrives: 'Reading the drives …',
     drivesFailed: "The list of drives couldn't be read.",

@@ -25,6 +25,7 @@ const (
 	codeNotFound       = "not_found"
 	codeNotADirectory  = "not_a_directory"
 	codeScanRunning    = "scan_running"
+	codeBusy           = "busy" // a folder dialog is already open
 	codeInternal       = "internal"
 	codeForbidden      = "forbidden" // 403 only; the website never sees it
 	maxRequestBodySize = 64 << 10
@@ -83,6 +84,9 @@ type serverConfig struct {
 	// endpoints are unknown).
 	cleanup cleanupSystem
 	reveal  func(path string) error
+	// pick shows the folder dialog and returns the chosen folder, or
+	// cancelled; nil where there is none.
+	pick func(title, startPath string) (path string, cancelled bool, err error)
 }
 
 // server implements the helper's HTTP API.
@@ -101,6 +105,7 @@ type server struct {
 	elevateMu   sync.Mutex
 	cleanupMu   sync.Mutex   // one recycle or delete request at a time
 	cleanupBusy atomic.Int32 // recycle or delete requests running or waiting
+	picking     atomic.Bool  // a folder dialog is open
 }
 
 func newServer(cfg serverConfig) *server {
@@ -229,6 +234,8 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 		s.handleResult(w, seg[1])
 	case len(seg) == 3 && seg[0] == "scans" && seg[2] == "cancel" && post:
 		s.handleCancel(w, r, seg[1])
+	case len(seg) == 1 && seg[0] == "pick-folder" && post && s.pick != nil:
+		s.handlePickFolder(w, r)
 	case len(seg) == 1 && seg[0] == "reveal" && post && s.reveal != nil:
 		s.handleReveal(w, r)
 	case len(seg) == 1 && seg[0] == "recycle" && post && s.cleanup != nil:
@@ -279,6 +286,9 @@ func (s *server) handleInfo(w http.ResponseWriter) {
 // features lists the actions this helper offers; the website offers only these.
 func (s *server) features() []string {
 	f := []string{"scan"}
+	if s.pick != nil {
+		f = append(f, "pick")
+	}
 	if s.reveal != nil {
 		f = append(f, "reveal")
 	}
@@ -286,6 +296,51 @@ func (s *server) features() []string {
 		f = append(f, "recycle", "delete")
 	}
 	return f
+}
+
+// handlePickFolder shows Windows' folder dialog (POST /v1/pick-folder). One
+// dialog at a time; the request stays open until the user decides, and the
+// idle exit waits for it.
+func (s *server) handlePickFolder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title     *string `json:"title"`
+		StartPath *string `json:"startPath"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	var title, start string
+	if req.Title != nil {
+		title = *req.Title
+	}
+	if req.StartPath != nil {
+		if c, err := cleanWindowsPath(*req.StartPath); err == nil {
+			start = c // a path that isn't valid is ignored, like one that doesn't exist
+		}
+	}
+	if !s.picking.CompareAndSwap(false, true) {
+		writeError(w, http.StatusConflict, codeBusy, "a folder dialog is already open")
+		return
+	}
+	defer s.picking.Store(false)
+	defer s.touch() // the idle time starts when the dialog closes
+
+	raw, cancelled, err := s.pick(title, start)
+	switch {
+	case err != nil:
+		s.logger.Printf("error: the folder dialog failed: %v", err)
+		writeError(w, http.StatusInternalServerError, codeInternal, "the folder dialog failed: "+err.Error())
+	case cancelled:
+		writeJSON(w, http.StatusOK, map[string]bool{"cancelled": true})
+	default:
+		p, err := cleanWindowsPath(raw)
+		if err != nil {
+			s.logger.Printf("error: the folder dialog returned an unusable path: %v", err)
+			writeError(w, http.StatusInternalServerError, codeInternal, "the folder dialog returned a path the helper can't use")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"path": p})
+	}
 }
 
 // handleReveal opens File Explorer with the item selected.
@@ -709,7 +764,7 @@ func (s *server) exitAfter(w http.ResponseWriter, reason string) {
 // idleExpired reports whether the helper has been idle long enough to exit:
 // no request for the idle time while no scan was running.
 func (s *server) idleExpired(now time.Time) bool {
-	if s.idle <= 0 || s.inFlight.Load() > 0 || s.cleanupBusy.Load() > 0 || s.scanRunning() {
+	if s.idle <= 0 || s.inFlight.Load() > 0 || s.cleanupBusy.Load() > 0 || s.picking.Load() || s.scanRunning() {
 		return false
 	}
 	return now.Sub(time.Unix(0, s.activity.Load())) >= s.idle

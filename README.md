@@ -32,9 +32,22 @@ Browsers protect some system locations and won't open them, for example the root
 
 An optional small program for what the browser can't open: whole drives such as `C:\` and system folders. It has no window and closes itself when it hasn't been used for a while. With it, DiskAtlas also shows the size on disk and marks links and OneDrive online-only files. Restarted as administrator, it can read protected folders too.
 
+| | Browser only | With the helper |
+| --- | --- | --- |
+| Your own folders and other drives, such as `D:\` | ✓ | ✓ |
+| Whole drives such as `C:\`, and the Windows, program and AppData folders | – (the browser blocks them) | ✓ |
+| Folder dialog | the browser's | Windows' own, any folder |
+| Folder tree, map, largest files, file types, file age, duplicates, CSV | ✓ | ✓ |
+| Size on disk | – | ✓ |
+| Links and OneDrive online-only files marked | – | ✓ |
+| Protected folders, with administrator rights | – | ✓ after the Windows prompt |
+| Show in Explorer | – | ✓ |
+| Move to the Recycle Bin, delete permanently | – (read-only) | ✓ after you confirm |
+| Installation | none | a small program without a window |
+
 Scanning only reads. The helper changes something only after you confirm it on the website: it moves an item to the Recycle Bin, or deletes it permanently if you explicitly choose that and confirm again. It always refuses system locations and never follows links while deleting.
 
-The helper listens only on `127.0.0.1` (ports 41417–41419) and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
+The helper listens only on `127.0.0.1` (ports 41417–41419), accepts connections only from programs of the same Windows user, and answers only the DiskAtlas website. [docs/helper-protocol.md](docs/helper-protocol.md) describes the protocol.
 
 Building it requires Go 1.25 or newer:
 

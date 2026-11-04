@@ -1,5 +1,6 @@
 import { HELPER_DOWNLOAD_URL, HELPER_START_URL, formatBytes, formatPercent, type HelperDrive } from '../core';
 import { append, clear, h, rich, setText, uniqueId, type Child } from './dom';
+import { helperComparison } from './helper-compare';
 import type { HelperLink } from './helper-link';
 import { t } from './i18n';
 import { icon, type IconName } from './icons';
@@ -35,6 +36,8 @@ export class HelperPanel {
         h('p', { class: 'helper__lede', text: t.helper.lede }),
       ),
       this.body,
+      // Why install it: what the browser alone can do, and what the helper adds.
+      helperComparison(),
       this.live,
     );
     this.lastAnnounced = this.statusText();

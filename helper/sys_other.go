@@ -41,6 +41,8 @@ func platformCleanup() cleanupSystem { return nil }
 
 func platformReveal() func(string) error { return nil }
 
+func platformPick() func(title, startPath string) (string, bool, error) { return nil }
+
 func friendlyError(err error) string { return err.Error() }
 
 // No same-user check here: every connection is allowed.

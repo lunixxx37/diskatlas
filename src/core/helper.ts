@@ -28,12 +28,12 @@ export interface HelperInfo {
   elevated: boolean;
   pid: number;
   idleTimeoutSeconds: number;
-  /** What this helper can do: "scan", and in newer versions "reveal", "recycle" and "delete". */
+  /** What this helper can do: "scan", and in newer versions "pick", "reveal", "recycle" and "delete". */
   features: string[];
 }
 
 /** Optional abilities a helper lists in /v1/info `features`. */
-export type HelperFeature = 'scan' | 'reveal' | 'recycle' | 'delete';
+export type HelperFeature = 'scan' | 'pick' | 'reveal' | 'recycle' | 'delete';
 
 export function hasFeature(info: Pick<HelperInfo, 'features'> | undefined | null, feature: HelperFeature): boolean {
   return !!info && info.features.includes(feature);
@@ -378,6 +378,21 @@ export class HelperClient {
     if (body.restarting === true) return { outcome: 'restarting' };
     if (body.elevated === true) return { outcome: 'elevated' };
     return { outcome: 'declined' };
+  }
+
+  /**
+   * Windows' own folder dialog, shown by the helper: unlike the browser's picker it takes
+   * drive roots and system folders. Waits for the user without a timeout. The chosen folder
+   * in clean form ("C:\\" for a drive root), or null when the dialog was closed. While a
+   * dialog is open, another request fails with HTTP 409 `busy`.
+   */
+  async pickFolder(title: string, startPath?: string): Promise<string | null> {
+    const body = await json<{ path?: unknown; cancelled?: unknown }>(
+      await call(this.env, this.port, '/pick-folder', { method: 'POST', body: startPath ? { title, startPath } : { title } }),
+    );
+    if (body.cancelled === true) return null;
+    if (typeof body.path === 'string' && body.path) return body.path;
+    throw new HelperError('wrong-server', 'The folder dialog gave no folder.');
   }
 
   /** Opens File Explorer with the item selected (for a folder: its parent, with the folder selected). */

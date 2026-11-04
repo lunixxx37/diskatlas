@@ -164,6 +164,7 @@ func serve(opts options, logger *log.Logger) int {
 		logger:      logger,
 		elevateArgs: elevatedArgs(opts, port),
 		cleanup:     platformCleanup(),
+		pick:        platformPick(),
 		reveal:      platformReveal(),
 		exit: func(reason string) {
 			select {

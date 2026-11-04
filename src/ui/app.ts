@@ -315,7 +315,30 @@ export class App {
 
   // ---------- flows ----------
 
+  /**
+   * "Choose folder", "Other folder": Windows' folder dialog through the helper while it is
+   * connected and offers it (drives and system folders too), else the browser's picker.
+   */
   private readonly pick = (): void => {
+    if (this.helper?.canPick) void this.pickWithHelper(this.helper);
+    else this.pickInBrowser();
+  };
+
+  /** The helper's folder dialog; a chosen folder is surveyed like a typed path. Closing it does nothing. */
+  private async pickWithHelper(helper: HelperLink): Promise<void> {
+    try {
+      const path = await helper.pickFolder(t.helper.pickTitle);
+      if (path) this.surveyWithHelper(path);
+    } catch (error) {
+      if (error instanceof HelperError && error.code === 'busy') toast(t.helper.pickBusy, 'info', 7000);
+      else if (error instanceof HelperError && error.kind === 'not-running') toast(t.helper.lost, 'alert', 7000);
+      else if (error instanceof HelperError && error.kind === 'denied') toast(`${t.errors.helperDeniedTitle} ${t.errors.helperDeniedText}`, 'alert', 8000);
+      else toast(t.helper.pickFailed(errorText(error)), 'alert', 7000);
+    }
+  }
+
+  /** The browser's own folder picker (also "Choose in the browser instead"). */
+  private readonly pickInBrowser = (): void => {
     if (this.support === 'picker') {
       pickDirectory().then(
         (handle) => {
@@ -345,10 +368,8 @@ export class App {
     if (source.kind === 'handle') void this.scanHandle(source.handle);
     else if (source.kind === 'demo') this.runDemo();
     else if (source.kind === 'helper') void this.rescanWithHelper(source.path);
-    else {
-      this.input.value = '';
-      this.input.click();
-    }
+    // A file list: choose the folder again (through the helper when it is connected).
+    else this.pick();
   };
 
   /** From the helper section: a scan of `path` that the helper has already started as `id`. */
@@ -458,7 +479,16 @@ export class App {
 
   private showStart(knowOpen = false): void {
     const helper = this.helper ? { link: this.helper, onSurvey: this.surveyWithHelper } : null;
-    const view = new StartView({ support: this.support, onPick: this.pick, onDemo: this.runDemo, knowOpen, helper, last: this.lastInfo(), onOpenLast: this.openLast });
+    const view = new StartView({
+      support: this.support,
+      onPick: this.pick,
+      onPickInBrowser: this.pickInBrowser,
+      onDemo: this.runDemo,
+      knowOpen,
+      helper,
+      last: this.lastInfo(),
+      onOpenLast: this.openLast,
+    });
     this.show('start', view, `${APP_NAME} – ${t.app.titleStart}`, { rerender: () => this.showStart(this.startView?.knowOpen) });
     this.startView = view;
   }

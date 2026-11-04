@@ -80,6 +80,7 @@ Any 4xx or 5xx response from an allowed origin has this JSON body:
 | 404 | `not_found` | unknown endpoint, unknown scan id, or the path does not exist |
 | 409 | `not_a_directory` | the path is a file |
 | 409 | `scan_running` | a result was requested before the scan finished |
+| 409 | `busy` | a folder dialog (`/v1/pick-folder`) is already open |
 | 500 | `internal` | anything unexpected |
 
 ## Endpoints
@@ -96,7 +97,7 @@ Any 4xx or 5xx response from an allowed origin has this JSON body:
   "elevated": false,
   "pid": 4242,
   "idleTimeoutSeconds": 600,
-  "features": ["scan", "reveal", "recycle", "delete"]
+  "features": ["scan", "pick", "reveal", "recycle", "delete"]
 }
 ```
 
@@ -170,6 +171,23 @@ Only one scan exists at a time. Starting a new scan cancels and discards the pre
 ### `POST /v1/scans/{id}/cancel`
 
 Returns `202` with the progress object, which already says `cancelled`. The result is frozen at that moment and can be fetched as a partial result.
+
+### `POST /v1/pick-folder`
+
+Shows Windows' own folder dialog and returns the folder the user chose. Browsers refuse drive roots and system folders in their folder picker, but this dialog allows any folder, so the website uses it instead while the helper is connected.
+
+Request body (both fields optional): `{ "title": "Choose a folder to survey", "startPath": "C:\\" }`
+
+- `title` is shown in the dialog. The website sends it in the user's language.
+- `startPath` is where the dialog starts, if that folder exists.
+
+Response `200`: `{ "path": "C:\\Users\\Ann" }`, or `{ "cancelled": true }` if the user closed the dialog.
+
+- `path` is in the clean form, as for `/v1/recycle`. A drive root is `C:\`.
+- Only folders of the file system can be chosen (`FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST`). Virtual places such as "This PC" can't be picked.
+- The dialog is owned by the window in the foreground when the request arrives, normally the browser, so it opens in front of it. It runs on the shell thread.
+- One dialog at a time: a second request while one is open gets `409` with code `busy`.
+- The request stays open until the user decides, with no timeout, and the idle exit waits for it.
 
 ### `POST /v1/reveal`
 

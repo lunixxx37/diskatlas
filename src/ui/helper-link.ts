@@ -1,6 +1,7 @@
 import {
   HelperError,
   findHelper,
+  hasFeature,
   loopbackPermission,
   scanWithHelper,
   type HelperClient,
@@ -89,11 +90,18 @@ export class HelperLink extends EventTarget {
   pathProblem: PathProblem | null = null;
   /** A scan start in flight (the Survey buttons wait for it). */
   starting = false;
+  /** Windows' folder dialog is open (the helper shows one at a time). */
+  picking = false;
   /** Every new action makes the answers to older ones stale. */
   private token = 0;
 
   get elevated(): boolean {
     return this.client?.info.elevated ?? false;
+  }
+
+  /** "Choose folder" goes through the helper: connected, and it offers Windows' folder dialog. */
+  get canPick(): boolean {
+    return this.status === 'connected' && !!this.client && hasFeature(this.client.info, 'pick');
   }
 
   private set(status: HelperStatus, note: HelperNote = null): void {
@@ -284,6 +292,31 @@ export class HelperLink extends EventTarget {
       return null;
     } finally {
       this.starting = false;
+      this.changed();
+    }
+  }
+
+  /**
+   * Windows' folder dialog through the helper, titled `title`: the chosen folder, or null
+   * when the user closed it. Fails with HTTP 409 `busy` while a dialog is already open (it
+   * may sit behind the browser), and marks the helper lost when it is gone.
+   */
+  async pickFolder(title: string): Promise<string | null> {
+    const client = this.client;
+    if (!client) throw new HelperError('not-running', 'The helper is not connected.');
+    if (this.picking) throw new HelperError('http', 'A folder dialog is already open.', 409, 'busy');
+    this.picking = true;
+    this.changed();
+    try {
+      return await client.pickFolder(title);
+    } catch (error) {
+      if (error instanceof HelperError && this.client === client) {
+        if (error.kind === 'not-running') this.lost();
+        else if (error.kind === 'denied') this.fail(error);
+      }
+      throw error;
+    } finally {
+      this.picking = false;
       this.changed();
     }
   }
